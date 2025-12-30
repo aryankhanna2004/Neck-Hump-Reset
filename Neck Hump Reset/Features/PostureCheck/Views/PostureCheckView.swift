@@ -6,10 +6,13 @@
 //
 
 import SwiftUI
+import SwiftData
+import PhotosUI
 
 struct PostureCheckView: View {
     @StateObject private var viewModel = PostureCheckViewModel()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     
     var body: some View {
         ZStack {
@@ -213,6 +216,15 @@ struct PostureCheckView: View {
                     
                     Spacer()
                     
+                    // Camera flip button
+                    Button(action: { viewModel.flipCamera() }) {
+                        Image(systemName: "camera.rotate")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(Color.black.opacity(0.5)))
+                    }
+                    
                     // Status indicator
                     HStack(spacing: 6) {
                         Circle()
@@ -300,7 +312,7 @@ struct PostureCheckView: View {
                 
                 Spacer()
                 
-                // Bottom guidance (no capture button)
+                // Bottom controls
                 VStack(spacing: AppTheme.Spacing.md) {
                     // Progress indicator
                     if viewModel.isCountingDown {
@@ -318,6 +330,57 @@ struct PostureCheckView: View {
                         Text("Stand sideways • Show ear & shoulder")
                             .font(AppTheme.Typography.small)
                             .foregroundColor(.white.opacity(0.7))
+                    }
+                    
+                    // Action buttons row
+                    HStack(spacing: AppTheme.Spacing.xl) {
+                        // Photo picker button
+                        PhotosPicker(
+                            selection: $viewModel.selectedPhotoItem,
+                            matching: .images,
+                            photoLibrary: .shared()
+                        ) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "photo.on.rectangle")
+                                    .font(.system(size: 24))
+                                Text("Upload")
+                                    .font(AppTheme.Typography.small)
+                            }
+                            .foregroundColor(.white)
+                            .frame(width: 70, height: 60)
+                            .background(Circle().fill(Color.black.opacity(0.5)).frame(width: 56, height: 56))
+                        }
+                        .onChange(of: viewModel.selectedPhotoItem) { _, newItem in
+                            Task {
+                                await viewModel.handleSelectedPhoto(newItem)
+                            }
+                        }
+                        
+                        // Manual capture button (larger, center)
+                        Button(action: { viewModel.manualCapture() }) {
+                            ZStack {
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 4)
+                                    .frame(width: 72, height: 72)
+                                
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 60, height: 60)
+                            }
+                        }
+                        
+                        // Camera flip button (alternative position)
+                        Button(action: { viewModel.flipCamera() }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: viewModel.cameraManager.isUsingFrontCamera ? "camera.rotate" : "camera.rotate.fill")
+                                    .font(.system(size: 24))
+                                Text(viewModel.cameraManager.isUsingFrontCamera ? "Back" : "Front")
+                                    .font(AppTheme.Typography.small)
+                            }
+                            .foregroundColor(.white)
+                            .frame(width: 70, height: 60)
+                            .background(Circle().fill(Color.black.opacity(0.5)).frame(width: 56, height: 56))
+                        }
                     }
                 }
                 .padding(.bottom, AppTheme.Spacing.xxl)
@@ -450,6 +513,30 @@ struct PostureCheckView: View {
                 
                 // Actions
                 VStack(spacing: AppTheme.Spacing.md) {
+                    // Save button
+                    Button(action: {
+                        viewModel.savePhoto(modelContext: modelContext)
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: viewModel.isSaved ? "checkmark.circle.fill" : "square.and.arrow.down")
+                                .font(.system(size: 18))
+                            Text(viewModel.isSaved ? "Saved!" : "Save to Progress")
+                                .font(AppTheme.Typography.button)
+                        }
+                        .foregroundColor(viewModel.isSaved ? .green : AppTheme.Colors.deepNavy)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                                .fill(viewModel.isSaved ? Color.green.opacity(0.2) : AppTheme.Colors.accentCyan)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                                .stroke(viewModel.isSaved ? Color.green : Color.clear, lineWidth: 2)
+                        )
+                    }
+                    .disabled(viewModel.isSaved)
+                    
                     PrimaryButton(title: "Take Another", action: { viewModel.retake() })
                     SecondaryButton(title: "Done", action: { dismiss() })
                 }

@@ -102,12 +102,11 @@ class PostureDetectionService: ObservableObject {
     }
     
     /// Process live camera frame for real-time feedback
-    func processLiveFrame(_ sampleBuffer: CMSampleBuffer) {
-        guard !isProcessing else { return }
+    nonisolated func processLiveFrame(_ sampleBuffer: CMSampleBuffer) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
-        analysisQueue.async { [weak self] in
-            self?.processPixelBufferForLiveFeedback(pixelBuffer)
+        Task {
+            await processPixelBufferForLiveFeedback(pixelBuffer)
         }
     }
     
@@ -184,67 +183,106 @@ class PostureDetectionService: ObservableObject {
     
     /// Extract pose points from Vision observation
     /// **Important:** Vision uses bottom-left origin, we convert to top-left origin
+    /// 
+    /// **Side Profile Detection Strategy:**
+    /// Apple's Vision is optimized for front-facing poses, so for side profiles we:
+    /// 1. Use the ear with higher confidence (the visible one)
+    /// 2. Use the shoulder with higher confidence (the visible one)
+    /// 3. Fall back to neck point if ears aren't detected well
+    /// 4. Use nose as a backup head position reference
     private func extractSideProfilePose(from observation: VNHumanBodyPoseObservation) -> SideProfilePose {
-        // Helper to convert Vision coordinates (bottom-left origin) to UI coordinates (top-left origin)
-        func toUICoordinates(_ jointName: VNHumanBodyPoseObservation.JointName) -> CGPoint? {
+        // Helper to get a point with confidence check
+        func getPoint(_ jointName: VNHumanBodyPoseObservation.JointName, minConfidence: Float = 0.1) -> (point: CGPoint, confidence: Float)? {
             guard let point = try? observation.recognizedPoint(jointName),
-                  point.confidence > 0.3 else { return nil }
-            // Vision: origin bottom-left, Y increases upward
-            // UI: origin top-left, Y increases downward
-            // Convert: flip Y axis
-            return CGPoint(x: point.location.x, y: 1.0 - point.location.y)
+                  point.confidence > minConfidence else { return nil }
+            // Convert from Vision (bottom-left origin) to UI (top-left origin)
+            let uiPoint = CGPoint(x: point.location.x, y: 1.0 - point.location.y)
+            return (uiPoint, point.confidence)
         }
         
-        // Try to get both ears and use the more visible one (higher confidence)
-        let leftEar = try? observation.recognizedPoint(.leftEar)
-        let rightEar = try? observation.recognizedPoint(.rightEar)
-        
+        // === EAR DETECTION ===
+        // For side profile, typically only one ear is visible
         var earPoint: CGPoint?
+        var earConfidence: Float = 0
+        
+        let leftEar = getPoint(.leftEar, minConfidence: 0.1)
+        let rightEar = getPoint(.rightEar, minConfidence: 0.1)
+        
         if let le = leftEar, let re = rightEar {
-            // Use the one with higher confidence (more visible in side view)
-            let bestEar = le.confidence > re.confidence ? le : re
-            if bestEar.confidence > 0.3 {
-                earPoint = CGPoint(x: bestEar.location.x, y: 1.0 - bestEar.location.y)
+            // Both detected - use the one with higher confidence
+            if le.confidence > re.confidence {
+                earPoint = le.point
+                earConfidence = le.confidence
+            } else {
+                earPoint = re.point
+                earConfidence = re.confidence
             }
-        } else if let le = leftEar, le.confidence > 0.3 {
-            earPoint = CGPoint(x: le.location.x, y: 1.0 - le.location.y)
-        } else if let re = rightEar, re.confidence > 0.3 {
-            earPoint = CGPoint(x: re.location.x, y: 1.0 - re.location.y)
+        } else if let le = leftEar {
+            earPoint = le.point
+            earConfidence = le.confidence
+        } else if let re = rightEar {
+            earPoint = re.point
+            earConfidence = re.confidence
         }
         
-        // Similarly for shoulders
-        let leftShoulder = try? observation.recognizedPoint(.leftShoulder)
-        let rightShoulder = try? observation.recognizedPoint(.rightShoulder)
+        // If ear confidence is low, try using nose as head reference
+        let noseData = getPoint(.nose, minConfidence: 0.1)
+        var nosePoint: CGPoint?
+        if let nose = noseData {
+            nosePoint = nose.point
+            // If ear wasn't found well, we can still use nose
+            if earPoint == nil || earConfidence < 0.3 {
+                // Nose is usually more reliably detected
+                // For CVA calculation, ear is better, but nose works as fallback
+            }
+        }
         
+        // === SHOULDER DETECTION ===
+        // For side profile, one shoulder is more visible
         var shoulderPoint: CGPoint?
+        
+        let leftShoulder = getPoint(.leftShoulder, minConfidence: 0.1)
+        let rightShoulder = getPoint(.rightShoulder, minConfidence: 0.1)
+        
         if let ls = leftShoulder, let rs = rightShoulder {
-            let bestShoulder = ls.confidence > rs.confidence ? ls : rs
-            if bestShoulder.confidence > 0.3 {
-                shoulderPoint = CGPoint(x: bestShoulder.location.x, y: 1.0 - bestShoulder.location.y)
+            // Both detected - use the one with higher confidence
+            if ls.confidence > rs.confidence {
+                shoulderPoint = ls.point
+            } else {
+                shoulderPoint = rs.point
             }
-        } else if let ls = leftShoulder, ls.confidence > 0.3 {
-            shoulderPoint = CGPoint(x: ls.location.x, y: 1.0 - ls.location.y)
-        } else if let rs = rightShoulder, rs.confidence > 0.3 {
-            shoulderPoint = CGPoint(x: rs.location.x, y: 1.0 - rs.location.y)
+        } else if let ls = leftShoulder {
+            shoulderPoint = ls.point
+        } else if let rs = rightShoulder {
+            shoulderPoint = rs.point
         }
         
-        // Hip for reference
-        let leftHip = try? observation.recognizedPoint(.leftHip)
-        let rightHip = try? observation.recognizedPoint(.rightHip)
+        // Try neck as backup reference point for shoulder area
+        if shoulderPoint == nil {
+            if let neck = getPoint(.neck, minConfidence: 0.1) {
+                // Neck is at base of head - can use as approximate shoulder reference
+                // Offset slightly down for better shoulder approximation
+                shoulderPoint = CGPoint(x: neck.point.x, y: neck.point.y + 0.05)
+            }
+        }
         
+        // === HIP DETECTION ===
         var hipPoint: CGPoint?
-        if let lh = leftHip, let rh = rightHip {
-            let bestHip = lh.confidence > rh.confidence ? lh : rh
-            if bestHip.confidence > 0.3 {
-                hipPoint = CGPoint(x: bestHip.location.x, y: 1.0 - bestHip.location.y)
-            }
-        } else if let lh = leftHip, lh.confidence > 0.3 {
-            hipPoint = CGPoint(x: lh.location.x, y: 1.0 - lh.location.y)
-        } else if let rh = rightHip, rh.confidence > 0.3 {
-            hipPoint = CGPoint(x: rh.location.x, y: 1.0 - rh.location.y)
-        }
         
-        let nosePoint = toUICoordinates(.nose)
+        let leftHip = getPoint(.leftHip, minConfidence: 0.1)
+        let rightHip = getPoint(.rightHip, minConfidence: 0.1)
+        
+        if let lh = leftHip, let rh = rightHip {
+            if lh.confidence > rh.confidence {
+                hipPoint = lh.point
+            } else {
+                hipPoint = rh.point
+            }
+        } else if let lh = leftHip {
+            hipPoint = lh.point
+        } else if let rh = rightHip {
+            hipPoint = rh.point
+        }
         
         return SideProfilePose(ear: earPoint, shoulder: shoulderPoint, hip: hipPoint, nose: nosePoint)
     }

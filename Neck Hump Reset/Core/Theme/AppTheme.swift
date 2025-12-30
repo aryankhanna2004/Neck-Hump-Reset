@@ -42,6 +42,7 @@ struct AppTheme {
         static let title = Font.system(size: 28, weight: .semibold, design: .rounded)
         static let headline = Font.system(size: 20, weight: .semibold, design: .rounded)
         static let body = Font.system(size: 17, weight: .regular, design: .rounded)
+        static let button = Font.system(size: 17, weight: .semibold, design: .rounded)
         static let caption = Font.system(size: 14, weight: .regular, design: .rounded)
         static let small = Font.system(size: 12, weight: .medium, design: .rounded)
     }

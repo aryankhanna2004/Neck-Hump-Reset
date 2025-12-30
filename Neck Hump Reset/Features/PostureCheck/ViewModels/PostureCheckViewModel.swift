@@ -8,6 +8,8 @@
 import SwiftUI
 import Combine
 import CoreMedia
+import SwiftData
+import PhotosUI
 
 @MainActor
 class PostureCheckViewModel: ObservableObject {
@@ -32,10 +34,18 @@ class PostureCheckViewModel: ObservableObject {
     
     // Captured image and editable points
     @Published var capturedPhoto: CGImage?
+    @Published var capturedPhotoData: Data?
     @Published var editableEarPoint: CGPoint?
     @Published var editableShoulderPoint: CGPoint?
     @Published var isEditingPoints: Bool = false
     @Published var selectedPointToEdit: EditablePoint? = nil
+    
+    // Save status
+    @Published var isSaved: Bool = false
+    
+    // Photo picker
+    @Published var selectedPhotoItem: PhotosPickerItem? = nil
+    @Published var showPhotoPicker: Bool = false
     
     // MARK: - Services
     let cameraManager = CameraManager()
@@ -62,6 +72,13 @@ class PostureCheckViewModel: ObservableObject {
                 Task {
                     await self?.analyzeImage(image)
                 }
+            }
+            .store(in: &cancellables)
+        
+        // Listen for captured photo data (for storage)
+        cameraManager.$capturedImageData
+            .sink { [weak self] data in
+                self?.capturedPhotoData = data
             }
             .store(in: &cancellables)
         
@@ -155,6 +172,10 @@ class PostureCheckViewModel: ObservableObject {
         cameraManager.stopSession()
     }
     
+    func flipCamera() {
+        cameraManager.flipCamera()
+    }
+    
     func beginCheck() {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             currentState = .positioning
@@ -162,9 +183,12 @@ class PostureCheckViewModel: ObservableObject {
         postureService.reset()
         stableFrameCount = 0
         capturedPhoto = nil
+        capturedPhotoData = nil
         editableEarPoint = nil
         editableShoulderPoint = nil
         isEditingPoints = false
+        isSaved = false
+        cameraManager.clearCapturedImage()
         startCamera()
     }
     
@@ -176,10 +200,13 @@ class PostureCheckViewModel: ObservableObject {
         countdownValue = nil
         isCountingDown = false
         capturedPhoto = nil
+        capturedPhotoData = nil
         editableEarPoint = nil
         editableShoulderPoint = nil
         isEditingPoints = false
         selectedPointToEdit = nil
+        isSaved = false
+        cameraManager.clearCapturedImage()
         
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             currentState = .positioning
@@ -196,9 +223,81 @@ class PostureCheckViewModel: ObservableObject {
         postureService.reset()
         stableFrameCount = 0
         capturedPhoto = nil
+        capturedPhotoData = nil
         editableEarPoint = nil
         editableShoulderPoint = nil
         isEditingPoints = false
+        isSaved = false
+        cameraManager.clearCapturedImage()
+    }
+    
+    // MARK: - Photo Library Import
+    
+    func handleSelectedPhoto(_ item: PhotosPickerItem?) async {
+        guard let item = item else { return }
+        
+        do {
+            if let data = try await item.loadTransferable(type: Data.self),
+               let uiImage = UIImage(data: data) {
+                // Stop camera since we're using an imported photo
+                stopCamera()
+                
+                // Set the image through camera manager (handles orientation)
+                cameraManager.setImage(from: uiImage)
+                
+                // Transition to analyzing state
+                await MainActor.run {
+                    withAnimation {
+                        currentState = .analyzing
+                        isAnalyzing = true
+                    }
+                }
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load photo: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    // MARK: - Manual Capture (for when auto-capture doesn't trigger)
+    
+    func manualCapture() {
+        guard currentState == .positioning else { return }
+        
+        withAnimation {
+            currentState = .analyzing
+            isAnalyzing = true
+            countdownValue = nil
+            isCountingDown = false
+        }
+        
+        cameraManager.capturePhoto()
+    }
+    
+    // MARK: - Save Photo
+    
+    func savePhoto(modelContext: ModelContext) {
+        guard let imageData = capturedPhotoData, let result = analysisResult else {
+            print("❌ Cannot save: missing image data or result")
+            return
+        }
+        
+        let posturePhoto = PosturePhoto(
+            imageData: imageData,
+            timestamp: Date(),
+            result: result
+        )
+        
+        modelContext.insert(posturePhoto)
+        
+        do {
+            try modelContext.save()
+            isSaved = true
+            print("✅ Photo saved successfully")
+        } catch {
+            print("❌ Failed to save photo: \(error)")
+        }
     }
     
     // MARK: - Edit Mode Methods
@@ -251,6 +350,7 @@ class PostureCheckViewModel: ObservableObject {
             )
             isEditingPoints = false
             selectedPointToEdit = nil
+            isSaved = false // Mark as unsaved after edit
         }
     }
     
@@ -263,19 +363,16 @@ class PostureCheckViewModel: ObservableObject {
         countdownValue = 3
         positioningMessage = "Perfect! Capturing in 3..."
         
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
-            Task { @MainActor in
-                guard let self = self else {
-                    timer.invalidate()
-                    return
-                }
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 
                 if let current = self.countdownValue, current > 1 {
                     self.countdownValue = current - 1
                     self.positioningMessage = "Hold still... \(current - 1)"
                 } else {
                     // Countdown finished, capture!
-                    timer.invalidate()
+                    self.countdownTimer?.invalidate()
                     self.countdownTimer = nil
                     self.performAutoCapture()
                 }

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct Neck_Hump_ResetApp: App {
@@ -14,5 +15,6 @@ struct Neck_Hump_ResetApp: App {
             RootView()
                 .preferredColorScheme(.dark)
         }
+        .modelContainer(for: PosturePhoto.self)
     }
 }
