@@ -10,7 +10,7 @@ import Combine
 
 @MainActor
 class MainViewModel: ObservableObject {
-    @Published var selectedTab: MainTab = .today
+    @Published var selectedTab: MainTab = .home
     @Published var userProfile: UserProfile
     
     init() {
@@ -65,23 +65,23 @@ class MainViewModel: ObservableObject {
 }
 
 enum MainTab: String, CaseIterable {
-    case today = "today"
+    case home = "home"
+    case exercises = "exercises"
     case progress = "progress"
-    case settings = "settings"
     
     var title: String {
         switch self {
-        case .today: return "Today"
+        case .home: return "Home"
+        case .exercises: return "Exercises"
         case .progress: return "Progress"
-        case .settings: return "Settings"
         }
     }
     
     var icon: String {
         switch self {
-        case .today: return "flame.fill"
+        case .home: return "camera.viewfinder"
+        case .exercises: return "figure.strengthtraining.traditional"
         case .progress: return "chart.line.uptrend.xyaxis"
-        case .settings: return "gearshape.fill"
         }
     }
 }

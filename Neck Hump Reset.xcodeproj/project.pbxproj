@@ -6,7 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CB4506EEB5A1B670036B1A88 /* Pods_Neck_Hump_Reset.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 440DC5606AFB0D7B48C3815F /* Pods_Neck_Hump_Reset.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		440DC5606AFB0D7B48C3815F /* Pods_Neck_Hump_Reset.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Neck_Hump_Reset.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		505B460B3B6BF061018C1D40 /* Pods-Neck Hump Reset.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Neck Hump Reset.debug.xcconfig"; path = "Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset.debug.xcconfig"; sourceTree = "<group>"; };
+		97A87156EDD5229E6F010F01 /* Pods-Neck Hump Reset.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Neck Hump Reset.release.xcconfig"; path = "Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset.release.xcconfig"; sourceTree = "<group>"; };
 		DE1C28B32F01F0050086A1FF /* Neck Hump Reset.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Neck Hump Reset.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -23,17 +30,37 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CB4506EEB5A1B670036B1A88 /* Pods_Neck_Hump_Reset.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		94D4D04C63FE26BA047A7796 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				505B460B3B6BF061018C1D40 /* Pods-Neck Hump Reset.debug.xcconfig */,
+				97A87156EDD5229E6F010F01 /* Pods-Neck Hump Reset.release.xcconfig */,
+			);
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		D7AD0815A961C1B95A731976 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				440DC5606AFB0D7B48C3815F /* Pods_Neck_Hump_Reset.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		DE1C28AA2F01F0050086A1FF = {
 			isa = PBXGroup;
 			children = (
 				DE1C28B52F01F0050086A1FF /* Neck Hump Reset */,
 				DE1C28B42F01F0050086A1FF /* Products */,
+				94D4D04C63FE26BA047A7796 /* Pods */,
+				D7AD0815A961C1B95A731976 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -52,9 +79,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = DE1C28C02F01F0050086A1FF /* Build configuration list for PBXNativeTarget "Neck Hump Reset" */;
 			buildPhases = (
+				69CA051AC83E53D006CD2407 /* [CP] Check Pods Manifest.lock */,
 				DE1C28AF2F01F0050086A1FF /* Sources */,
 				DE1C28B02F01F0050086A1FF /* Frameworks */,
 				DE1C28B12F01F0050086A1FF /* Resources */,
+				19799EB9C1494BD780F8F124 /* [CP] Embed Pods Frameworks */,
+				57C8DD1060D7AD66F8268575 /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -64,8 +94,6 @@
 				DE1C28B52F01F0050086A1FF /* Neck Hump Reset */,
 			);
 			name = "Neck Hump Reset";
-			packageProductDependencies = (
-			);
 			productName = "Neck Hump Reset";
 			productReference = DE1C28B32F01F0050086A1FF /* Neck Hump Reset.app */;
 			productType = "com.apple.product-type.application";
@@ -113,6 +141,73 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		19799EB9C1494BD780F8F124 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		57C8DD1060D7AD66F8268575 /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Neck Hump Reset/Pods-Neck Hump Reset-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		69CA051AC83E53D006CD2407 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-Neck Hump Reset-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		DE1C28AF2F01F0050086A1FF /* Sources */ = {
@@ -163,7 +258,7 @@
 				DEVELOPMENT_TEAM = C5A4Q7BH32;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -225,7 +320,7 @@
 				DEVELOPMENT_TEAM = C5A4Q7BH32;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -243,6 +338,7 @@
 		};
 		DE1C28C12F01F0050086A1FF /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 505B460B3B6BF061018C1D40 /* Pods-Neck Hump Reset.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -255,6 +351,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Neck Hump Reset uses your camera to analyze your posture and track your progress. All processing happens on your device - your photos are never uploaded.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save your posture check photos to track your progress over time.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -288,6 +385,7 @@
 		};
 		DE1C28C22F01F0050086A1FF /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 97A87156EDD5229E6F010F01 /* Pods-Neck Hump Reset.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -300,6 +398,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Neck Hump Reset uses your camera to analyze your posture and track your progress. All processing happens on your device - your photos are never uploaded.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save your posture check photos to track your progress over time.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -310,7 +409,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.7;

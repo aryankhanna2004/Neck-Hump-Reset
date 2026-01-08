@@ -125,62 +125,6 @@ struct RestrictionsView: View {
     }
 }
 
-// MARK: - Multi Select Card
-struct MultiSelectCard: View {
-    let icon: String
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: AppTheme.Spacing.md) {
-                Text(icon)
-                    .font(.system(size: 24))
-                    .frame(width: 40, height: 40)
-                    .background(
-                        Circle()
-                            .fill(isSelected ? AppTheme.Colors.accentCyan.opacity(0.2) : AppTheme.Colors.primaryBlue.opacity(0.3))
-                    )
-                
-                Text(title)
-                    .font(AppTheme.Typography.headline)
-                    .foregroundColor(AppTheme.Colors.softWhite)
-                
-                Spacer()
-                
-                // Checkbox
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(isSelected ? AppTheme.Colors.accentCyan : AppTheme.Colors.mutedGray.opacity(0.5), lineWidth: 2)
-                        .frame(width: 24, height: 24)
-                    
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(AppTheme.Colors.accentCyan)
-                            .frame(width: 16, height: 16)
-                        
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(AppTheme.Colors.deepNavy)
-                    }
-                }
-            }
-            .padding(AppTheme.Spacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
-                    .fill(isSelected ? AppTheme.Colors.primaryBlue.opacity(0.4) : AppTheme.Colors.primaryBlue.opacity(0.15))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
-                            .stroke(isSelected ? AppTheme.Colors.accentCyan.opacity(0.6) : AppTheme.Colors.accentCyan.opacity(0.1), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-    }
-}
-
 #Preview {
     let vm = OnboardingViewModel()
     vm.currentStep = .restrictions

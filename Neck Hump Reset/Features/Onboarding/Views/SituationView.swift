@@ -24,16 +24,23 @@ struct SituationView: View {
                 
                 Spacer().frame(height: AppTheme.Spacing.lg)
                 
-                // Situation cards
+                // Situation cards - Multi-select
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: AppTheme.Spacing.sm) {
+                        // Multi-select hint
+                        Text("Select all that apply")
+                            .font(AppTheme.Typography.small)
+                            .foregroundColor(AppTheme.Colors.accentCyan)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AppTheme.Spacing.lg)
+                            .padding(.bottom, AppTheme.Spacing.xs)
+                        
                         ForEach(Array(UserSituation.allCases.enumerated()), id: \.element.id) { index, situation in
-                            SelectionCard(
+                            MultiSelectCard(
                                 icon: situation.icon,
                                 title: situation.title,
-                                subtitle: nil,
-                                isSelected: viewModel.selectedSituation == situation,
-                                action: { viewModel.selectSituation(situation) }
+                                isSelected: viewModel.selectedSituations.contains(situation),
+                                action: { viewModel.toggleSituation(situation) }
                             )
                             .opacity(cardsAppeared ? 1 : 0)
                             .offset(y: cardsAppeared ? 0 : 20)

@@ -23,11 +23,9 @@ class CameraManager: NSObject, ObservableObject {
     // MARK: - Properties
     let session = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
-    private let videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "camera.session")
     private var currentCameraInput: AVCaptureDeviceInput?
-    
-    var onFrameCaptured: ((CMSampleBuffer) -> Void)?
+    private var currentCameraPosition: AVCaptureDevice.Position = .front
     
     // MARK: - Init
     override init() {
@@ -116,28 +114,10 @@ class CameraManager: NSObject, ObservableObject {
                 }
             }
             
-            // Add video output for live analysis (only if not already added)
-            if !session.outputs.contains(videoOutput) {
-                videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "video.output"))
-                videoOutput.alwaysDiscardsLateVideoFrames = true
-                
-                if session.canAddOutput(videoOutput) {
-                    session.addOutput(videoOutput)
-                }
-            }
-            
-            // Configure video connection
-            if let connection = videoOutput.connection(with: .video) {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-                // Mirror only for front camera
-                if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = (position == .front)
-                }
-            }
-            
             session.commitConfiguration()
+            
+            // Store current position for photo processing
+            self.currentCameraPosition = position
             
             DispatchQueue.main.async {
                 self.isCameraReady = true
@@ -190,13 +170,14 @@ class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Set image from external source (photo library)
     func setImage(from uiImage: UIImage) {
-        let portraitImage = uiImage.toPortrait()
-        let jpegData = portraitImage.jpegData(compressionQuality: 0.8)
+        // Properly fix orientation for library photos
+        let normalizedImage = uiImage.normalizedForLibrary()
+        let jpegData = normalizedImage.jpegData(compressionQuality: 0.8)
         
         DispatchQueue.main.async {
-            self.capturedImage = portraitImage.cgImage
+            self.capturedImage = normalizedImage.cgImage
             self.capturedImageData = jpegData
-            print("📷 Image set from library: \(portraitImage.size.width)x\(portraitImage.size.height)")
+            print("📷 Image set from library: \(normalizedImage.size.width)x\(normalizedImage.size.height), orientation: \(uiImage.imageOrientation.rawValue)")
         }
     }
     
@@ -204,13 +185,6 @@ class CameraManager: NSObject, ObservableObject {
     func clearCapturedImage() {
         capturedImage = nil
         capturedImageData = nil
-    }
-}
-
-// MARK: - Video Output Delegate
-extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        onFrameCaptured?(sampleBuffer)
     }
 }
 
@@ -232,16 +206,24 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
             return
         }
         
-        // Ensure portrait orientation (fixes EXIF and rotates if landscape)
-        let portraitImage = uiImage.toPortrait()
+        // Process image based on camera position
+        let processedImage: UIImage
+        
+        if currentCameraPosition == .back {
+            // Back camera: fix orientation to match front camera behavior
+            processedImage = uiImage.normalizedForBackCamera()
+        } else {
+            // Front camera: use existing portrait fix
+            processedImage = uiImage.toPortrait()
+        }
         
         // Convert to JPEG for storage (good quality, reasonable size)
-        let jpegData = portraitImage.jpegData(compressionQuality: 0.8)
+        let jpegData = processedImage.jpegData(compressionQuality: 0.8)
         
         DispatchQueue.main.async {
-            self.capturedImage = portraitImage.cgImage
+            self.capturedImage = processedImage.cgImage
             self.capturedImageData = jpegData
-            print("📷 Photo captured: \(portraitImage.size.width)x\(portraitImage.size.height)")
+            print("📷 Photo captured (\(self.currentCameraPosition == .front ? "front" : "back")): \(processedImage.size.width)x\(processedImage.size.height)")
         }
     }
 }
@@ -379,5 +361,76 @@ extension UIImage {
         }
         
         return fixedImage
+    }
+    
+    /// Normalizes back camera image to match front camera output
+    /// Back camera captures with different orientation metadata
+    func normalizedForBackCamera() -> UIImage {
+        guard let cgImage = self.cgImage else { return self }
+        
+        // Get the actual pixel dimensions
+        let pixelWidth = cgImage.width
+        let pixelHeight = cgImage.height
+        
+        // Determine if we need to rotate based on dimensions and orientation
+        let isLandscapePixels = pixelWidth > pixelHeight
+        
+        // Create a new image with correct orientation
+        let targetSize: CGSize
+        let needsRotation: Bool
+        
+        if isLandscapePixels {
+            // Pixels are landscape, need to rotate to portrait
+            targetSize = CGSize(width: pixelHeight, height: pixelWidth)
+            needsRotation = true
+        } else {
+            // Already portrait pixels
+            targetSize = CGSize(width: pixelWidth, height: pixelHeight)
+            needsRotation = false
+        }
+        
+        UIGraphicsBeginImageContextWithOptions(targetSize, false, 1.0)
+        guard let context = UIGraphicsGetCurrentContext() else {
+            UIGraphicsEndImageContext()
+            return self
+        }
+        
+        if needsRotation {
+            // Rotate 90 degrees clockwise to make portrait
+            context.translateBy(x: targetSize.width, y: 0)
+            context.rotate(by: .pi / 2)
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+        } else {
+            // Just draw normally, but flip vertically for UIKit coordinate system
+            context.translateBy(x: 0, y: targetSize.height)
+            context.scaleBy(x: 1.0, y: -1.0)
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+        }
+        
+        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        return normalizedImage ?? self
+    }
+    
+    /// Normalizes an image from the photo library
+    /// Handles all EXIF orientations and ensures the image displays correctly
+    func normalizedForLibrary() -> UIImage {
+        // If already up orientation, just return
+        guard imageOrientation != .up else { return self }
+        
+        // Use UIGraphics to redraw with correct orientation
+        // This is the most reliable way to handle all orientations
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        format.opaque = false
+        
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        
+        let normalizedImage = renderer.image { _ in
+            self.draw(at: .zero)
+        }
+        
+        return normalizedImage
     }
 }

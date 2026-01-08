@@ -21,6 +21,17 @@ struct OnboardingContainerView: View {
                         removal: .move(edge: .leading).combined(with: .opacity)
                     ))
                 
+            case .nameEntry:
+                NameEntryView(
+                    viewModel: viewModel,
+                    onBack: { viewModel.previousStep() },
+                    onContinue: { viewModel.nextStep() }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                
             case .screenTime:
                 ScreenTimeView(
                     viewModel: viewModel,

@@ -10,6 +10,7 @@ import Foundation
 // MARK: - Onboarding Step
 enum OnboardingStep: Int, CaseIterable {
     case welcome = 0
+    case nameEntry
     case screenTime
     case screenTimeReassurance
     case situation
@@ -21,6 +22,8 @@ enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome:
             return ""
+        case .nameEntry:
+            return "What's your name?"
         case .screenTime:
             return "Screen & sitting time"
         case .screenTimeReassurance:
@@ -40,6 +43,8 @@ enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome:
             return ""
+        case .nameEntry:
+            return "Let's personalize your experience"
         case .screenTime:
             return "On a typical day, how long are you sitting or on screens?"
         case .screenTimeReassurance:
@@ -55,9 +60,9 @@ enum OnboardingStep: Int, CaseIterable {
         }
     }
     
-    // Steps that count toward progress (excluding reassurance screen)
+    // Steps that count toward progress (excluding reassurance screen and welcome)
     static var progressSteps: [OnboardingStep] {
-        [.screenTime, .situation, .timeCommitment, .movementComfort]
+        [.nameEntry, .screenTime, .situation, .timeCommitment, .movementComfort]
     }
     
     var progressIndex: Int? {
@@ -245,8 +250,10 @@ enum CameraPreference: String, CaseIterable, Identifiable {
 
 // MARK: - User Profile
 struct UserProfile: Codable {
+    var firstName: String?
+    var lastName: String?
     var screenTime: String?
-    var situation: String?
+    var situations: [String]? // Changed to array for multi-select
     var timeCommitment: String?
     var movementComfort: String?
     var restrictions: [String]?
@@ -254,6 +261,18 @@ struct UserProfile: Codable {
     var cameraPreference: String?
     var hasCompletedOnboarding: Bool = false
     var createdAt: Date = Date()
+    
+    // Legacy support for single situation
+    var situation: String? {
+        get { situations?.first }
+        set {
+            if let value = newValue {
+                situations = [value]
+            } else {
+                situations = nil
+            }
+        }
+    }
     
     static let storageKey = "user_profile"
     
@@ -269,5 +288,55 @@ struct UserProfile: Codable {
         if let data = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(data, forKey: UserProfile.storageKey)
         }
+    }
+    
+    // MARK: - Computed Display Properties
+    
+    var fullName: String {
+        let first = firstName ?? ""
+        let last = lastName ?? ""
+        let name = "\(first) \(last)".trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? "User" : name
+    }
+    
+    var displayName: String {
+        firstName ?? "User"
+    }
+    
+    var initials: String {
+        let first = firstName?.first.map { String($0).uppercased() } ?? ""
+        let last = lastName?.first.map { String($0).uppercased() } ?? ""
+        return first + last
+    }
+    
+    var screenTimeDisplay: ScreenTime? {
+        guard let raw = screenTime else { return nil }
+        return ScreenTime(rawValue: raw)
+    }
+    
+    var situationsDisplay: [UserSituation] {
+        guard let situations = situations else { return [] }
+        return situations.compactMap { UserSituation(rawValue: $0) }
+    }
+    
+    var timeCommitmentDisplay: TimeCommitment? {
+        guard let raw = timeCommitment else { return nil }
+        return TimeCommitment(rawValue: raw)
+    }
+    
+    var movementComfortDisplay: MovementComfort? {
+        guard let raw = movementComfort else { return nil }
+        return MovementComfort(rawValue: raw)
+    }
+    
+    var restrictionsDisplay: [ExerciseRestriction] {
+        guard let restrictions = restrictions else { return [] }
+        return restrictions.compactMap { ExerciseRestriction(rawValue: $0) }
+    }
+    
+    var memberSince: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: createdAt)
     }
 }

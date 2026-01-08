@@ -2,7 +2,7 @@
 //  MainTabView.swift
 //  Neck Hump Reset
 //
-//  Created by ET Loaner on 12/28/25.
+//  Main tab navigation with 3 core features
 //
 
 import SwiftUI
@@ -12,23 +12,32 @@ struct MainTabView: View {
     
     var body: some View {
         TabView(selection: $viewModel.selectedTab) {
-            TodayView(viewModel: viewModel)
-                .tabItem {
-                    Label(MainTab.today.title, systemImage: MainTab.today.icon)
-                }
-                .tag(MainTab.today)
+            // Home / Posture Check
+            NavigationStack {
+                TodayView(viewModel: viewModel)
+            }
+            .tabItem {
+                Label(MainTab.home.title, systemImage: MainTab.home.icon)
+            }
+            .tag(MainTab.home)
             
-            ProgressPlaceholderView()
-                .tabItem {
-                    Label(MainTab.progress.title, systemImage: MainTab.progress.icon)
-                }
-                .tag(MainTab.progress)
+            // Exercises
+            NavigationStack {
+                ExercisesView()
+            }
+            .tabItem {
+                Label(MainTab.exercises.title, systemImage: MainTab.exercises.icon)
+            }
+            .tag(MainTab.exercises)
             
-            SettingsPlaceholderView()
-                .tabItem {
-                    Label(MainTab.settings.title, systemImage: MainTab.settings.icon)
-                }
-                .tag(MainTab.settings)
+            // Progress
+            NavigationStack {
+                ProgressPlaceholderView()
+            }
+            .tabItem {
+                Label(MainTab.progress.title, systemImage: MainTab.progress.icon)
+            }
+            .tag(MainTab.progress)
         }
         .tint(AppTheme.Colors.accentCyan)
     }

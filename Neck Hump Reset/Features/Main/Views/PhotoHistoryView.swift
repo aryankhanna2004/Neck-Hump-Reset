@@ -8,6 +8,77 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Image Rendering Helper (non-isolated for background thread use)
+enum ImageRenderer {
+    static func renderWithOverlay(
+        baseImage: UIImage?,
+        showOverlay: Bool,
+        ear: CGPoint?,
+        shoulder: CGPoint?
+    ) -> UIImage? {
+        guard let baseImage = baseImage else { return nil }
+        
+        if !showOverlay {
+            return baseImage
+        }
+        
+        let size = baseImage.size
+        let renderer = UIGraphicsImageRenderer(size: size)
+        
+        return renderer.image { context in
+            baseImage.draw(at: .zero)
+            
+            if let ear = ear, let shoulder = shoulder {
+                let earPixel = CGPoint(x: ear.x * size.width, y: ear.y * size.height)
+                let shoulderPixel = CGPoint(x: shoulder.x * size.width, y: shoulder.y * size.height)
+                
+                let linePath = UIBezierPath()
+                linePath.move(to: shoulderPixel)
+                linePath.addLine(to: earPixel)
+                UIColor.cyan.setStroke()
+                linePath.lineWidth = 4
+                linePath.stroke()
+                
+                let idealPath = UIBezierPath()
+                idealPath.move(to: shoulderPixel)
+                idealPath.addLine(to: CGPoint(x: shoulderPixel.x, y: earPixel.y))
+                UIColor.green.withAlphaComponent(0.7).setStroke()
+                idealPath.lineWidth = 2
+                idealPath.setLineDash([8, 4], count: 2, phase: 0)
+                idealPath.stroke()
+                
+                let pointRadius: CGFloat = max(size.width * 0.015, 8)
+                
+                let earRect = CGRect(
+                    x: earPixel.x - pointRadius,
+                    y: earPixel.y - pointRadius,
+                    width: pointRadius * 2,
+                    height: pointRadius * 2
+                )
+                UIColor.cyan.setFill()
+                UIBezierPath(ovalIn: earRect).fill()
+                UIColor.white.setStroke()
+                let earCircle = UIBezierPath(ovalIn: earRect)
+                earCircle.lineWidth = 2
+                earCircle.stroke()
+                
+                let shoulderRect = CGRect(
+                    x: shoulderPixel.x - pointRadius,
+                    y: shoulderPixel.y - pointRadius,
+                    width: pointRadius * 2,
+                    height: pointRadius * 2
+                )
+                UIColor.orange.setFill()
+                UIBezierPath(ovalIn: shoulderRect).fill()
+                UIColor.white.setStroke()
+                let shoulderCircle = UIBezierPath(ovalIn: shoulderRect)
+                shoulderCircle.lineWidth = 2
+                shoulderCircle.stroke()
+            }
+        }
+    }
+}
+
 /// View showing all saved posture photos with timestamps
 struct PhotoHistoryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -132,10 +203,10 @@ struct PhotoCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "angle")
                             .font(.system(size: 10))
-                        Text(String(format: "%.1f°", cva))
+                        Text("CVA: \(String(format: "%.0f°", cva))")
                             .font(AppTheme.Typography.small)
                     }
-                    .foregroundColor(AppTheme.Colors.accentCyan)
+                    .foregroundColor(cva >= 50 ? .green : .orange)
                 }
             }
             .padding(.horizontal, 4)
@@ -168,6 +239,11 @@ struct PhotoDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showDeleteConfirmation = false
     @State private var showOverlay = true
+    @State private var showSaveSuccess = false
+    @State private var showSaveError = false
+    @State private var isSharing = false
+    @State private var isSaving = false
+    @State private var isDeleting = false
     
     var body: some View {
         NavigationStack {
@@ -216,22 +292,35 @@ struct PhotoDetailView: View {
                         // Metrics
                         metricsCard
                         
+                        // Share/Save buttons
+                        shareAndSaveButtons
+                        
                         // Delete button
                         Button(role: .destructive) {
                             showDeleteConfirmation = true
                         } label: {
-                            Label("Delete Photo", systemImage: "trash")
-                                .font(AppTheme.Typography.button)
-                                .foregroundColor(.red)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.red.opacity(0.5), lineWidth: 1)
-                                )
+                            HStack(spacing: 8) {
+                                if isDeleting {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .red))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "trash")
+                                }
+                                Text("Delete Photo")
+                            }
+                            .font(AppTheme.Typography.button)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.red.opacity(0.5), lineWidth: 1)
+                            )
                         }
+                        .disabled(isDeleting)
                         .padding(.horizontal, AppTheme.Spacing.lg)
-                        .padding(.top, AppTheme.Spacing.md)
+                        .padding(.top, AppTheme.Spacing.sm)
                     }
                     .padding(.vertical, AppTheme.Spacing.lg)
                 }
@@ -245,17 +334,160 @@ struct PhotoDetailView: View {
                     }
                 }
             }
-            .confirmationDialog(
-                "Delete this photo?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
+            .alert("Delete this photo?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) {
                     deletePhoto()
                 }
-                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This action cannot be undone.")
+            }
+            .alert("Saved!", isPresented: $showSaveSuccess) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Photo saved to your photo library.")
+            }
+            .alert("Error", isPresented: $showSaveError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Could not save photo. Please check your privacy settings.")
+            }
+        }
+    }
+    
+    // MARK: - Share and Save Buttons
+    private var shareAndSaveButtons: some View {
+        HStack(spacing: AppTheme.Spacing.md) {
+            // Share button
+            Button(action: shareResults) {
+                HStack(spacing: 8) {
+                    if isSharing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.Colors.softWhite))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16))
+                    }
+                    Text("Share")
+                        .font(AppTheme.Typography.button)
+                }
+                .foregroundColor(AppTheme.Colors.softWhite)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppTheme.Colors.primaryBlue)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppTheme.Colors.accentCyan.opacity(0.5), lineWidth: 1)
+                        )
+                )
+            }
+            .disabled(isSharing || isSaving)
+            
+            // Save to Photos button
+            Button(action: saveToPhotos) {
+                HStack(spacing: 8) {
+                    if isSaving {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.Colors.deepNavy))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "arrow.down.to.line")
+                            .font(.system(size: 16))
+                    }
+                    Text("Save")
+                        .font(AppTheme.Typography.button)
+                }
+                .foregroundColor(AppTheme.Colors.deepNavy)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppTheme.Colors.accentCyan)
+                )
+            }
+            .disabled(isSharing || isSaving)
+        }
+        .padding(.horizontal, AppTheme.Spacing.lg)
+        .padding(.top, AppTheme.Spacing.md)
+    }
+    
+    // MARK: - Share Text
+    private var shareText: String {
+        var text = "My Posture Check Results\n"
+        text += "📅 \(photo.formattedDate)\n"
+        
+        if let severity = photo.severity {
+            text += "📊 Assessment: \(severity.rawValue)\n"
+        }
+        if let cva = photo.craniovertebralAngle {
+            text += "📐 CVA: \(String(format: "%.1f°", cva))\n"
+        }
+        if let score = photo.postureScore {
+            text += "⭐ Score: \(score)/100\n"
+        }
+        
+        text += "\n#PostureCheck #NeckHumpReset"
+        return text
+    }
+    
+    // MARK: - Actions
+    private func shareResults() {
+        guard !isSharing && !isSaving else { return }
+        isSharing = true
+        
+        // Capture values needed for background processing
+        let baseImage = photo.image
+        let shouldShowOverlay = showOverlay
+        let ear = photo.earPoint
+        let shoulder = photo.shoulderPoint
+        let text = shareText
+        
+        Task {
+            let image = await Task.detached(priority: .userInitiated) {
+                ImageRenderer.renderWithOverlay(
+                    baseImage: baseImage,
+                    showOverlay: shouldShowOverlay,
+                    ear: ear,
+                    shoulder: shoulder
+                )
+            }.value
+            
+            isSharing = false
+            if let image = image {
+                presentShareSheet(items: [image, text])
+            }
+        }
+    }
+    
+    private func saveToPhotos() {
+        guard !isSharing && !isSaving else { return }
+        isSaving = true
+        
+        // Capture values needed for background processing
+        let baseImage = photo.image
+        let shouldShowOverlay = showOverlay
+        let ear = photo.earPoint
+        let shoulder = photo.shoulderPoint
+        
+        Task {
+            let image = await Task.detached(priority: .userInitiated) {
+                ImageRenderer.renderWithOverlay(
+                    baseImage: baseImage,
+                    showOverlay: shouldShowOverlay,
+                    ear: ear,
+                    shoulder: shoulder
+                )
+            }.value
+            
+            isSaving = false
+            if let image = image {
+                UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                showSaveSuccess = true
+            } else {
+                showSaveError = true
             }
         }
     }
@@ -280,35 +512,81 @@ struct PhotoDetailView: View {
             
             // CVA
             if let cva = photo.craniovertebralAngle {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .center, spacing: AppTheme.Spacing.md) {
+                    // Left side - Label and explanation
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CVA")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(AppTheme.Colors.softWhite)
+                        
                         Text("Craniovertebral Angle")
-                            .font(AppTheme.Typography.body)
+                            .font(.system(size: 11))
                             .foregroundColor(AppTheme.Colors.mutedGray)
-                        Text("Ideal: 50°+")
-                            .font(AppTheme.Typography.small)
-                            .foregroundColor(AppTheme.Colors.mutedGray.opacity(0.7))
+                        
+                        Text("Normal: >53°")
+                            .font(.system(size: 10))
+                            .foregroundColor(cva >= 50 ? .green.opacity(0.8) : .orange.opacity(0.8))
                     }
+                    
                     Spacer()
-                    Text(String(format: "%.1f°", cva))
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .foregroundColor(AppTheme.Colors.accentCyan)
+                    
+                    // Right side - Big value
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(String(format: "%.0f°", cva))
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundColor(cva >= 50 ? .green : .orange)
+                        
+                        Text(cva >= 53 ? "Good" : (cva >= 45 ? "Mild" : "Needs work"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(cva >= 50 ? .green.opacity(0.8) : .orange.opacity(0.8))
+                    }
                 }
+                .padding(AppTheme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppTheme.Colors.primaryBlue.opacity(0.15))
+                )
             }
-            
-            Divider().background(AppTheme.Colors.mutedGray.opacity(0.3))
             
             // Forward distance
             if let distance = photo.forwardHeadDistance {
-                HStack {
-                    Text("Forward Distance")
-                        .font(AppTheme.Typography.body)
-                        .foregroundColor(AppTheme.Colors.mutedGray)
+                HStack(alignment: .center, spacing: AppTheme.Spacing.md) {
+                    // Left side - Label
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Forward Head")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(AppTheme.Colors.softWhite)
+                        
+                        Text("Distance from ideal")
+                            .font(.system(size: 11))
+                            .foregroundColor(AppTheme.Colors.mutedGray)
+                        
+                        Text("Less is better")
+                            .font(.system(size: 10))
+                            .foregroundColor(distance < 3 ? .green.opacity(0.8) : .orange.opacity(0.8))
+                    }
+                    
                     Spacer()
-                    Text(String(format: "~%.1f cm", distance))
-                        .font(AppTheme.Typography.headline)
-                        .foregroundColor(AppTheme.Colors.softWhite)
+                    
+                    // Right side - Value
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(String(format: "%.1f", distance))
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundColor(distance < 3 ? .green : .orange)
+                        + Text(" cm")
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundColor(distance < 3 ? .green.opacity(0.7) : .orange.opacity(0.7))
+                        
+                        Text(distance < 2 ? "Aligned" : (distance < 4 ? "Slight" : "Forward"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(distance < 3 ? .green.opacity(0.8) : .orange.opacity(0.8))
+                    }
                 }
+                .padding(AppTheme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppTheme.Colors.primaryBlue.opacity(0.15))
+                )
             }
             
             // Score
@@ -357,9 +635,39 @@ struct PhotoDetailView: View {
     }
     
     private func deletePhoto() {
-        modelContext.delete(photo)
-        try? modelContext.save()
-        dismiss()
+        isDeleting = true
+        
+        // Small delay for visual feedback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            modelContext.delete(photo)
+            try? modelContext.save()
+            dismiss()
+        }
+    }
+    
+    private func presentShareSheet(items: [Any]) {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            return
+        }
+        
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        
+        // For iPad support
+        if let popover = activityVC.popoverPresentationController {
+            popover.sourceView = rootViewController.view
+            let bounds = rootViewController.view.bounds
+            popover.sourceRect = CGRect(x: bounds.midX, y: bounds.midY, width: 0, height: 0)
+            popover.permittedArrowDirections = []
+        }
+        
+        // Find the topmost presented view controller
+        var topController = rootViewController
+        while let presented = topController.presentedViewController {
+            topController = presented
+        }
+        
+        topController.present(activityVC, animated: true)
     }
 }
 

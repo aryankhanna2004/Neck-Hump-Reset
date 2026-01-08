@@ -77,6 +77,81 @@ struct SelectionCard: View {
     }
 }
 
+// MARK: - Multi-Select Card (with checkbox style)
+struct MultiSelectCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String?
+    let isSelected: Bool
+    let action: () -> Void
+    
+    init(icon: String, title: String, subtitle: String? = nil, isSelected: Bool, action: @escaping () -> Void) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.isSelected = isSelected
+        self.action = action
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: AppTheme.Spacing.md) {
+                // Checkbox
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isSelected ? AppTheme.Colors.accentCyan : AppTheme.Colors.mutedGray.opacity(0.5), lineWidth: 2)
+                        .frame(width: 24, height: 24)
+                    
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(AppTheme.Colors.accentCyan)
+                            .frame(width: 16, height: 16)
+                        
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(AppTheme.Colors.deepNavy)
+                    }
+                }
+                
+                // Icon
+                Text(icon)
+                    .font(.system(size: 24))
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle()
+                            .fill(isSelected ? AppTheme.Colors.accentCyan.opacity(0.2) : AppTheme.Colors.primaryBlue.opacity(0.3))
+                    )
+                
+                // Text content
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(AppTheme.Typography.headline)
+                        .foregroundColor(AppTheme.Colors.softWhite)
+                    
+                    if let subtitle = subtitle {
+                        Text(subtitle)
+                            .font(AppTheme.Typography.caption)
+                            .foregroundColor(AppTheme.Colors.mutedGray)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(AppTheme.Spacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                    .fill(isSelected ? AppTheme.Colors.primaryBlue.opacity(0.4) : AppTheme.Colors.primaryBlue.opacity(0.15))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                            .stroke(isSelected ? AppTheme.Colors.accentCyan.opacity(0.6) : AppTheme.Colors.accentCyan.opacity(0.1), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+    }
+}
+
 #Preview {
     ZStack {
         AppTheme.Colors.deepNavy.ignoresSafeArea()
@@ -92,6 +167,27 @@ struct SelectionCard: View {
                 icon: "🎮",
                 title: "Gamer / Heavy phone user",
                 subtitle: nil,
+                isSelected: false,
+                action: {}
+            )
+            
+            Divider()
+            
+            MultiSelectCard(
+                icon: "📚",
+                title: "Student",
+                isSelected: true,
+                action: {}
+            )
+            MultiSelectCard(
+                icon: "🎮",
+                title: "Gamer",
+                isSelected: true,
+                action: {}
+            )
+            MultiSelectCard(
+                icon: "💼",
+                title: "Office Work",
                 isSelected: false,
                 action: {}
             )

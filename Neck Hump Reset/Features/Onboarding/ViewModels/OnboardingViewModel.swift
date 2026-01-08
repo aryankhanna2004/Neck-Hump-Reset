@@ -12,25 +12,34 @@ import Combine
 class OnboardingViewModel: ObservableObject {
     // MARK: - Published Properties
     @Published var currentStep: OnboardingStep = .welcome
+    @Published var firstName: String = ""
+    @Published var lastName: String = ""
     @Published var selectedScreenTime: ScreenTime?
-    @Published var selectedSituation: UserSituation?
+    @Published var selectedSituations: Set<UserSituation> = [] // Changed to Set for multi-select
     @Published var selectedTimeCommitment: TimeCommitment?
     @Published var selectedMovementComfort: MovementComfort?
     @Published var selectedRestrictions: Set<ExerciseRestriction> = []
     @Published var otherRestrictionText: String = ""
     @Published var isOnboardingComplete: Bool = false
     
+    // Legacy computed property for backward compatibility
+    var selectedSituation: UserSituation? {
+        selectedSituations.first
+    }
+    
     // MARK: - Computed Properties
     var canProceed: Bool {
         switch currentStep {
         case .welcome:
             return true
+        case .nameEntry:
+            return !firstName.trimmingCharacters(in: .whitespaces).isEmpty
         case .screenTime:
             return selectedScreenTime != nil
         case .screenTimeReassurance:
             return true
         case .situation:
-            return selectedSituation != nil
+            return !selectedSituations.isEmpty // At least one situation selected
         case .timeCommitment:
             return selectedTimeCommitment != nil
         case .movementComfort:
@@ -71,6 +80,8 @@ class OnboardingViewModel: ObservableObject {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             switch currentStep {
             case .welcome:
+                currentStep = .nameEntry
+            case .nameEntry:
                 currentStep = .screenTime
             case .screenTime:
                 currentStep = .screenTimeReassurance
@@ -97,8 +108,10 @@ class OnboardingViewModel: ObservableObject {
             switch currentStep {
             case .welcome:
                 break
-            case .screenTime:
+            case .nameEntry:
                 currentStep = .welcome
+            case .screenTime:
+                currentStep = .nameEntry
             case .screenTimeReassurance:
                 currentStep = .screenTime
             case .situation:
@@ -120,10 +133,19 @@ class OnboardingViewModel: ObservableObject {
         }
     }
     
-    func selectSituation(_ situation: UserSituation) {
+    func toggleSituation(_ situation: UserSituation) {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            selectedSituation = situation
+            if selectedSituations.contains(situation) {
+                selectedSituations.remove(situation)
+            } else {
+                selectedSituations.insert(situation)
+            }
         }
+    }
+    
+    // Legacy method for backward compatibility
+    func selectSituation(_ situation: UserSituation) {
+        toggleSituation(situation)
     }
     
     func selectTimeCommitment(_ time: TimeCommitment) {
@@ -156,8 +178,10 @@ class OnboardingViewModel: ObservableObject {
     // MARK: - Persistence
     private func completeOnboarding() {
         var profile = UserProfile()
+        profile.firstName = firstName.trimmingCharacters(in: .whitespaces)
+        profile.lastName = lastName.trimmingCharacters(in: .whitespaces)
         profile.screenTime = selectedScreenTime?.rawValue
-        profile.situation = selectedSituation?.rawValue
+        profile.situations = selectedSituations.map { $0.rawValue }
         profile.timeCommitment = selectedTimeCommitment?.rawValue
         profile.movementComfort = selectedMovementComfort?.rawValue
         profile.restrictions = selectedRestrictions.map { $0.rawValue }
@@ -181,8 +205,10 @@ class OnboardingViewModel: ObservableObject {
     func resetOnboarding() {
         UserDefaults.standard.removeObject(forKey: UserProfile.storageKey)
         currentStep = .welcome
+        firstName = ""
+        lastName = ""
         selectedScreenTime = nil
-        selectedSituation = nil
+        selectedSituations.removeAll()
         selectedTimeCommitment = nil
         selectedMovementComfort = nil
         selectedRestrictions.removeAll()

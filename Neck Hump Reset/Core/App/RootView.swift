@@ -33,6 +33,12 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.4), value: showSplash)
         .animation(.easeInOut(duration: 0.4), value: hasCompletedOnboarding)
         .onAppear {
+            // Pre-warm the ML model on a background thread during splash
+            Task.detached {
+                await PostureDetectionService.shared.preWarmModel()
+            }
+            
+            // Dismiss splash after configured duration
             DispatchQueue.main.asyncAfter(deadline: .now() + AppConfig.splashDuration) {
                 withAnimation {
                     showSplash = false

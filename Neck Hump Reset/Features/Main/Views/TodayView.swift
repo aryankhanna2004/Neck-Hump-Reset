@@ -6,207 +6,480 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct TodayView: View {
     @ObservedObject var viewModel: MainViewModel
+    @Query(sort: \PosturePhoto.timestamp, order: .reverse) private var photos: [PosturePhoto]
     @State private var contentAppeared = false
     @State private var showPostureCheck = false
+    @State private var showSettings = false
+    @State private var pulseAnimation = false
+    
+    // Get today's photos
+    private var todayPhotos: [PosturePhoto] {
+        let calendar = Calendar.current
+        return photos.filter { calendar.isDateInToday($0.timestamp) }
+    }
+    
+    // Get latest photo
+    private var latestPhoto: PosturePhoto? {
+        photos.first
+    }
+    
+    // Calculate streak
+    private var currentStreak: Int {
+        guard !photos.isEmpty else { return 0 }
+        
+        let calendar = Calendar.current
+        var streak = 0
+        var currentDate = calendar.startOfDay(for: Date())
+        
+        // Check if there's a photo today
+        let hasPhotoToday = photos.contains { calendar.isDateInToday($0.timestamp) }
+        
+        // If no photo today, start checking from yesterday
+        if !hasPhotoToday {
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: currentDate) else { return 0 }
+            currentDate = yesterday
+        }
+        
+        // Count consecutive days with photos
+        while true {
+            let dayStart = currentDate
+            guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else { break }
+            
+            let hasPhotoOnDay = photos.contains { photo in
+                photo.timestamp >= dayStart && photo.timestamp < dayEnd
+            }
+            
+            if hasPhotoOnDay {
+                streak += 1
+                guard let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDate) else { break }
+                currentDate = previousDay
+            } else {
+                break
+            }
+        }
+        
+        return streak
+    }
+    
+    // Average score from last 7 days
+    private var weeklyAverageScore: Int? {
+        let calendar = Calendar.current
+        guard let weekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) else { return nil }
+        
+        let recentPhotos = photos.filter { $0.timestamp >= weekAgo && $0.postureScore != nil }
+        guard !recentPhotos.isEmpty else { return nil }
+        
+        let totalScore = recentPhotos.compactMap { $0.postureScore }.reduce(0, +)
+        return totalScore / recentPhotos.count
+    }
     
     var body: some View {
         ZStack {
             AppTheme.Colors.deepNavy.ignoresSafeArea()
             
             ScrollView(showsIndicators: false) {
-                VStack(spacing: AppTheme.Spacing.lg) {
+                VStack(spacing: AppTheme.Spacing.xl) {
+                    // Header with greeting
                     headerSection
                         .opacity(contentAppeared ? 1 : 0)
                         .offset(y: contentAppeared ? 0 : -20)
                     
-                    routineCard
+                    // HERO: Posture Check Button
+                    postureCheckHero
                         .opacity(contentAppeared ? 1 : 0)
-                        .offset(y: contentAppeared ? 0 : 20)
+                        .scaleEffect(contentAppeared ? 1 : 0.9)
                     
-                    // Posture Check Card (if camera enabled)
-                    if viewModel.usesCamera {
-                        postureCheckCard
+                    // Today's Progress (if any checks done)
+                    if !todayPhotos.isEmpty {
+                        todayProgressSection
                             .opacity(contentAppeared ? 1 : 0)
                             .offset(y: contentAppeared ? 0 : 20)
                     }
                     
+                    // Stats Section
                     statsSection
                         .opacity(contentAppeared ? 1 : 0)
                         .offset(y: contentAppeared ? 0 : 20)
                     
-                    quickActionsSection
+                    // Tips Section
+                    tipsSection
                         .opacity(contentAppeared ? 1 : 0)
+                        .offset(y: contentAppeared ? 0 : 20)
                 }
                 .padding(.horizontal, AppTheme.Spacing.lg)
                 .padding(.top, AppTheme.Spacing.md)
-                .padding(.bottom, 100)
+                .padding(.bottom, 120)
             }
         }
         .onAppear {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
                 contentAppeared = true
             }
+            // Start pulse animation after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                pulseAnimation = true
+            }
         }
         .fullScreenCover(isPresented: $showPostureCheck) {
             PostureCheckView()
         }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SettingsPlaceholderView()
+            }
+        }
     }
     
+    // MARK: - Header
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-            Text(viewModel.greetingText)
-                .font(AppTheme.Typography.caption)
-                .foregroundColor(AppTheme.Colors.mutedGray)
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(viewModel.greetingText)
+                    .font(AppTheme.Typography.caption)
+                    .foregroundColor(AppTheme.Colors.mutedGray)
+                
+                if let name = viewModel.userProfile.firstName, !name.isEmpty {
+                    Text("Hi, \(name)!")
+                        .font(AppTheme.Typography.largeTitle)
+                        .foregroundColor(AppTheme.Colors.softWhite)
+                } else {
+                    Text("Ready to reset?")
+                        .font(AppTheme.Typography.largeTitle)
+                        .foregroundColor(AppTheme.Colors.softWhite)
+                }
+            }
             
-            Text("Ready to reset?")
-                .font(AppTheme.Typography.largeTitle)
-                .foregroundColor(AppTheme.Colors.softWhite)
+            Spacer()
+            
+            // Streak badge
+            if currentStreak > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "flame.fill")
+                        .foregroundColor(.orange)
+                    Text("\(currentStreak)")
+                        .fontWeight(.bold)
+                        .foregroundColor(AppTheme.Colors.softWhite)
+                }
+                .font(.system(size: 14))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color.orange.opacity(0.2))
+                )
+            }
+            
+            // Settings button
+            Button(action: { showSettings = true }) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(AppTheme.Colors.mutedGray)
+                    .padding(10)
+                    .background(
+                        Circle()
+                            .fill(AppTheme.Colors.primaryBlue.opacity(0.3))
+                    )
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, AppTheme.Spacing.md)
     }
     
-    private var routineCard: some View {
-        VStack(spacing: AppTheme.Spacing.md) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Today's Routine")
-                        .font(AppTheme.Typography.headline)
-                        .foregroundColor(AppTheme.Colors.softWhite)
-                    
-                    Text("\(viewModel.timeCommitmentDisplay) • \(viewModel.situationLabel)")
-                        .font(AppTheme.Typography.caption)
-                        .foregroundColor(AppTheme.Colors.mutedGray)
-                }
-                
-                Spacer()
-                
-                Circle()
-                    .fill(AppTheme.Colors.buttonGradient)
-                    .frame(width: 56, height: 56)
-                    .overlay(
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(AppTheme.Colors.deepNavy)
-                            .offset(x: 2)
-                    )
-                    .shadow(color: AppTheme.Colors.accentCyan.opacity(0.4), radius: 12, x: 0, y: 4)
-            }
-            
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("0 of 5 exercises")
-                        .font(AppTheme.Typography.small)
-                        .foregroundColor(AppTheme.Colors.mutedGray)
-                    
-                    Spacer()
-                    
-                    Text("Not started")
-                        .font(AppTheme.Typography.small)
-                        .foregroundColor(AppTheme.Colors.accentCyan)
-                }
-                
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(AppTheme.Colors.primaryBlue.opacity(0.3))
-                            .frame(height: 6)
-                        
-                        Capsule()
-                            .fill(AppTheme.Colors.buttonGradient)
-                            .frame(width: 0, height: 6)
-                    }
-                }
-                .frame(height: 6)
-            }
-        }
-        .padding(AppTheme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: AppTheme.CornerRadius.large)
-                .fill(AppTheme.Colors.cardGradient)
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppTheme.CornerRadius.large)
-                        .stroke(AppTheme.Colors.accentCyan.opacity(0.15), lineWidth: 1)
-                )
-        )
-    }
-    
-    // MARK: - Posture Check Card
-    private var postureCheckCard: some View {
+    // MARK: - Hero Posture Check
+    private var postureCheckHero: some View {
         Button(action: { showPostureCheck = true }) {
-            HStack(spacing: AppTheme.Spacing.md) {
-                // Icon
+            VStack(spacing: AppTheme.Spacing.lg) {
+                // Animated icon
                 ZStack {
+                    // Outer pulse ring
                     Circle()
-                        .fill(AppTheme.Colors.glowBlue.opacity(0.2))
-                        .frame(width: 50, height: 50)
+                        .stroke(AppTheme.Colors.accentCyan.opacity(0.3), lineWidth: 2)
+                        .frame(width: 140, height: 140)
+                        .scaleEffect(pulseAnimation ? 1.2 : 1.0)
+                        .opacity(pulseAnimation ? 0 : 0.5)
+                        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
                     
-                    Image(systemName: "figure.stand")
-                        .font(.system(size: 24))
+                    // Middle ring
+                    Circle()
+                        .stroke(AppTheme.Colors.accentCyan.opacity(0.5), lineWidth: 3)
+                        .frame(width: 120, height: 120)
+                    
+                    // Inner circle with gradient
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    AppTheme.Colors.accentCyan.opacity(0.3),
+                                    AppTheme.Colors.primaryBlue.opacity(0.1)
+                                ],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 50
+                            )
+                        )
+                        .frame(width: 100, height: 100)
+                    
+                    // Icon
+                    Image(systemName: "camera.viewfinder")
+                        .font(.system(size: 44, weight: .light))
                         .foregroundColor(AppTheme.Colors.accentCyan)
                 }
                 
                 // Text
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Posture Check")
-                        .font(AppTheme.Typography.headline)
+                VStack(spacing: 8) {
+                    Text("Check Your Posture")
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundColor(AppTheme.Colors.softWhite)
                     
-                    Text("Analyze your posture with AI")
-                        .font(AppTheme.Typography.caption)
+                    Text("Take a side photo to analyze your neck alignment")
+                        .font(AppTheme.Typography.body)
                         .foregroundColor(AppTheme.Colors.mutedGray)
+                        .multilineTextAlignment(.center)
                 }
+                
+                // CTA Button
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14))
+                    Text("Start Check")
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(AppTheme.Colors.deepNavy)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 14)
+                .background(AppTheme.Colors.buttonGradient)
+                .cornerRadius(30)
+                .shadow(color: AppTheme.Colors.accentCyan.opacity(0.4), radius: 15, x: 0, y: 8)
+            }
+            .padding(.vertical, AppTheme.Spacing.xl)
+            .padding(.horizontal, AppTheme.Spacing.lg)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: AppTheme.CornerRadius.large)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppTheme.Colors.primaryBlue.opacity(0.3),
+                                AppTheme.Colors.primaryBlue.opacity(0.1)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppTheme.CornerRadius.large)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        AppTheme.Colors.accentCyan.opacity(0.5),
+                                        AppTheme.Colors.accentCyan.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            )
+        }
+        .buttonStyle(ScaleButtonStyle())
+    }
+    
+    // MARK: - Today's Progress
+    private var todayProgressSection: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+            HStack {
+                Text("Today's Progress")
+                    .font(AppTheme.Typography.headline)
+                    .foregroundColor(AppTheme.Colors.softWhite)
                 
                 Spacer()
                 
-                // Arrow
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(AppTheme.Colors.accentCyan)
+                Text("\(todayPhotos.count) check\(todayPhotos.count == 1 ? "" : "s")")
+                    .font(AppTheme.Typography.small)
+                    .foregroundColor(AppTheme.Colors.mutedGray)
+            }
+            
+            // Latest result card
+            if let latest = todayPhotos.first, let score = latest.postureScore {
+                HStack(spacing: AppTheme.Spacing.md) {
+                    // Score circle
+                    ZStack {
+                        Circle()
+                            .stroke(AppTheme.Colors.primaryBlue.opacity(0.3), lineWidth: 6)
+                            .frame(width: 70, height: 70)
+                        
+                        Circle()
+                            .trim(from: 0, to: CGFloat(score) / 100)
+                            .stroke(
+                                scoreColor(for: score),
+                                style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                            )
+                            .frame(width: 70, height: 70)
+                            .rotationEffect(.degrees(-90))
+                        
+                        Text("\(score)")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(AppTheme.Colors.softWhite)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Latest Score")
+                            .font(AppTheme.Typography.headline)
+                            .foregroundColor(AppTheme.Colors.softWhite)
+                        
+                        if let severity = latest.severity {
+                            Text(severity.title)
+                                .font(AppTheme.Typography.small)
+                                .foregroundColor(severityColor(severity))
+                        }
+                        
+                        Text(latest.timeString)
+                            .font(AppTheme.Typography.small)
+                            .foregroundColor(AppTheme.Colors.mutedGray)
+                    }
+                    
+                    Spacer()
+                    
+                    // Improvement indicator
+                    if todayPhotos.count > 1,
+                       let firstScore = todayPhotos.last?.postureScore,
+                       let latestScore = todayPhotos.first?.postureScore {
+                        let diff = latestScore - firstScore
+                        if diff != 0 {
+                            HStack(spacing: 4) {
+                                Image(systemName: diff > 0 ? "arrow.up" : "arrow.down")
+                                Text("\(abs(diff))")
+                            }
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(diff > 0 ? .green : .orange)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill((diff > 0 ? Color.green : Color.orange).opacity(0.2))
+                            )
+                        }
+                    }
+                }
+                .padding(AppTheme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                        .fill(AppTheme.Colors.primaryBlue.opacity(0.2))
+                )
+            }
+        }
+    }
+    
+    // MARK: - Stats Section
+    private var statsSection: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+            Text("Your Stats")
+                .font(AppTheme.Typography.headline)
+                .foregroundColor(AppTheme.Colors.softWhite)
+            
+            HStack(spacing: AppTheme.Spacing.md) {
+                // Streak
+                StatCard(
+                    icon: "flame.fill",
+                    value: "\(currentStreak)",
+                    label: "Day Streak",
+                    color: .orange
+                )
+                
+                // Total checks
+                StatCard(
+                    icon: "camera.fill",
+                    value: "\(photos.count)",
+                    label: "Total Checks",
+                    color: AppTheme.Colors.accentCyan
+                )
+            }
+            
+            HStack(spacing: AppTheme.Spacing.md) {
+                // Weekly average
+                StatCard(
+                    icon: "chart.line.uptrend.xyaxis",
+                    value: weeklyAverageScore.map { "\($0)" } ?? "-",
+                    label: "Weekly Avg",
+                    color: .purple
+                )
+                
+                // Best score
+                let bestScore = photos.compactMap { $0.postureScore }.max()
+                StatCard(
+                    icon: "star.fill",
+                    value: bestScore.map { "\($0)" } ?? "-",
+                    label: "Best Score",
+                    color: .yellow
+                )
+            }
+        }
+    }
+    
+    // MARK: - Tips Section
+    private var tipsSection: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+            Text("Quick Tips")
+                .font(AppTheme.Typography.headline)
+                .foregroundColor(AppTheme.Colors.softWhite)
+            
+            VStack(spacing: AppTheme.Spacing.sm) {
+                tipRow(icon: "clock", text: "Check your posture every 1-2 hours")
+                tipRow(icon: "figure.stand", text: "Stand sideways for best results")
+                tipRow(icon: "sun.max", text: "Use good lighting for accurate detection")
             }
             .padding(AppTheme.Spacing.md)
             .background(
                 RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
-                    .fill(AppTheme.Colors.primaryBlue.opacity(0.2))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
-                            .stroke(AppTheme.Colors.accentCyan.opacity(0.2), lineWidth: 1)
-                    )
+                    .fill(AppTheme.Colors.primaryBlue.opacity(0.1))
             )
         }
-        .buttonStyle(PlainButtonStyle())
     }
     
-    private var statsSection: some View {
-        HStack(spacing: AppTheme.Spacing.md) {
-            StatCard(icon: "flame.fill", value: "0", label: "Day streak", color: .orange)
-            StatCard(icon: "clock.fill", value: "0m", label: "Total time", color: AppTheme.Colors.accentCyan)
-        }
-    }
-    
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            Text("Quick Actions")
-                .font(AppTheme.Typography.caption)
+    private func tipRow(icon: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(AppTheme.Colors.accentCyan)
+                .frame(width: 24)
+            
+            Text(text)
+                .font(AppTheme.Typography.small)
                 .foregroundColor(AppTheme.Colors.mutedGray)
             
-            HStack(spacing: AppTheme.Spacing.md) {
-                QuickActionCard(
-                    icon: "timer",
-                    title: "3-min Break",
-                    action: {}
-                )
-                QuickActionCard(
-                    icon: "figure.walk",
-                    title: "Stretch",
-                    action: {}
-                )
-            }
+            Spacer()
         }
-        .padding(.top, AppTheme.Spacing.md)
+    }
+    
+    private func scoreColor(for score: Int) -> Color {
+        switch score {
+        case 80...100: return .green
+        case 60..<80: return .yellow
+        case 40..<60: return .orange
+        default: return .red
+        }
+    }
+    
+    private func severityColor(_ severity: HumpSeverity) -> Color {
+        switch severity {
+        case .minimal: return .green
+        case .mild: return AppTheme.Colors.accentCyan
+        case .moderate: return .orange
+        case .severe: return .red
+        }
+    }
+}
+
+// MARK: - Scale Button Style
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(response: 0.3), value: configuration.isPressed)
     }
 }
 
@@ -221,11 +494,11 @@ struct StatCard: View {
     var body: some View {
         VStack(spacing: AppTheme.Spacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 24))
+                .font(.system(size: 22))
                 .foregroundColor(color)
             
             Text(value)
-                .font(AppTheme.Typography.title)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundColor(AppTheme.Colors.softWhite)
             
             Text(label)
@@ -233,7 +506,7 @@ struct StatCard: View {
                 .foregroundColor(AppTheme.Colors.mutedGray)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, AppTheme.Spacing.lg)
+        .padding(.vertical, AppTheme.Spacing.md)
         .background(
             RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
                 .fill(AppTheme.Colors.primaryBlue.opacity(0.15))
@@ -245,37 +518,7 @@ struct StatCard: View {
     }
 }
 
-struct QuickActionCard: View {
-    let icon: String
-    let title: String
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: AppTheme.Spacing.sm) {
-                Image(systemName: icon)
-                    .font(.system(size: 22))
-                    .foregroundColor(AppTheme.Colors.accentCyan)
-                
-                Text(title)
-                    .font(AppTheme.Typography.small)
-                    .foregroundColor(AppTheme.Colors.softWhite)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppTheme.Spacing.lg)
-            .background(
-                RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
-                    .fill(AppTheme.Colors.primaryBlue.opacity(0.15))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
-                            .stroke(AppTheme.Colors.accentCyan.opacity(0.15), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
 #Preview {
     TodayView(viewModel: MainViewModel())
+        .modelContainer(for: PosturePhoto.self, inMemory: true)
 }

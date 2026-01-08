@@ -13,26 +13,42 @@ import CoreGraphics
 ///
 /// **Craniovertebral Angle (CVA):**
 /// The CVA is measured between a horizontal line through C7 and a line from the tragus (ear) to C7.
-/// - Normal posture: CVA > 50°
-/// - Mild FHP: CVA 45-50°
-/// - Moderate FHP: CVA 40-45°
-/// - Severe FHP: CVA < 45°
 ///
-/// Sources:
-/// - "Comparison of craniovertebral angle in young adults with and without forward head posture"
-///   (PubMed PMID: 38665167) - CVA < 45° indicates severe FHP, > 53° is normal
-/// - "Forward head posture and neck pain" (PubMed PMID: 34109357)
-/// - "A Preliminary Diagnostic Model for Forward Head Posture among Adolescents"
-///   (MDPI Diagnostics 2024;14(4):394) - Forward neck tilt > 25° indicates FHP
+/// **Primary Source - Titcomb et al. (2024):**
+/// "Evaluation of the Craniovertebral Angle in Standing versus Sitting Positions
+///  in Young Adults with and without Severe Forward Head Posture"
+/// International Journal of Exercise Science, 17(1):73-85
+/// DOI: 10.70252/GDNN4363 | PMCID: PMC11042887 | PMID: 38665167
 ///
-/// **Apple Vision Framework Coordinate System:**
-/// - VNRecognizedPoint returns normalized coordinates (0.0 to 1.0)
-/// - Origin is at BOTTOM-LEFT of the image
-/// - Y increases upward, X increases rightward
-/// - Must flip Y coordinate for standard UI coordinates (origin top-left)
+/// **Key Findings from Titcomb et al.:**
+/// - Normal posture: CVA > 53° (NORM group mean: 56.6 ± 2.7° standing)
+/// - Severe FHP: CVA < 45° (SEV group mean: 41.2 ± 3.2° standing)
+/// - Overall mean CVA: 50.0 ± 5.2° (standing), 47.8 ± 5.7° (sitting)
+/// - Standing position recommended for standardized CVA assessment
 ///
-/// Source: Apple Developer Documentation - "Detecting Human Body Poses in Images"
-/// https://developer.apple.com/documentation/vision/detecting-human-body-poses-in-images
+/// **Thresholds used in this app (based on research):**
+/// - CVA > 53°: Normal/Minimal - Great posture
+/// - CVA 45-53°: Mild FHP - Slightly forward head position
+/// - CVA 40-45°: Moderate FHP - Noticeable forward head
+/// - CVA < 40°: Severe FHP - Significant forward head posture
+///
+/// **Additional Sources:**
+/// - Singla D, Veqar Z. "Association between forward head, rounded shoulders,
+///   and increased thoracic kyphosis" J Chiropr Med. 2017;16(3):220-229
+/// - Shaghayegh Fard B, et al. "Evaluation of forward head posture in sitting
+///   and standing positions" Eur Spine J. 2016;25(11):3577-3582
+///
+/// **ML Kit Pose Detection:**
+/// This app uses Google ML Kit for pose landmark detection (ear, shoulder positions)
+/// ML Kit provides normalized coordinates (0.0 to 1.0) with origin at top-left
+///
+/// **C7 Vertebra Estimation (Important):**
+/// - ML Kit detects the tragus (ear) position accurately ✓
+/// - ML Kit detects shoulder joints (acromion), NOT the C7 vertebra ✗
+/// - We use Apple's VNGeneratePersonSegmentationRequest to find the back edge of the body
+/// - C7 is estimated as the back edge of the body at shoulder height
+/// - This approach works regardless of zoom level or camera distance
+/// - Users can manually adjust the "S" point for even better accuracy
 
 // MARK: - Neck Hump Analysis Result
 struct NeckHumpAnalysisResult {
@@ -58,24 +74,25 @@ struct NeckHumpAnalysisResult {
         // Calculate ideal ear position (directly above shoulder)
         self.idealEarPosition = CGPoint(x: shoulderPosition.x, y: earPosition.y)
         
-        // Calculate CVA: angle between horizontal and ear-to-shoulder line
-        // In a perfect posture, ear is directly above shoulder (CVA ≈ 90° from horizontal)
-        // We measure deviation from vertical, so CVA = 90 - neckAngle
-        self.craniovertebralAngle = 90.0 - abs(neckAngle)
+        // CVA (Craniovertebral Angle) is now calculated directly in calculateNeckAngle()
+        // It's the angle between horizontal through shoulder and line to ear
+        // Perfect posture: ear directly above shoulder = CVA of 90°
+        // Forward head: ear in front of shoulder = CVA decreases (e.g., 44° in severe FHP)
+        self.craniovertebralAngle = neckAngle
         
-        // Determine severity based on CVA (research-backed thresholds)
-        // CVA > 50°: Normal
-        // CVA 45-50°: Mild FHP
-        // CVA 40-45°: Moderate FHP
-        // CVA < 40°: Severe FHP
-        if craniovertebralAngle >= 50 {
+        // Determine severity based on CVA (research-backed thresholds from Titcomb et al. 2024)
+        // CVA > 53°: Normal (NORM group had mean 56.6°)
+        // CVA 45-53°: Mild FHP (between normal and severe thresholds)
+        // CVA 40-45°: Moderate FHP (approaching severe)
+        // CVA < 45°: Severe FHP (SEV group had mean 41.2°, threshold < 45°)
+        if craniovertebralAngle >= 53 {
             self.humpSeverity = .minimal
-            // Score 80-100 based on how close to ideal (CVA 90°)
-            self.overallScore = min(100, Int(80 + (craniovertebralAngle - 50) * 0.5))
+            // Score 85-100 based on how close to ideal (CVA ~57° is excellent)
+            self.overallScore = min(100, Int(85 + (craniovertebralAngle - 53) * 2.5))
         } else if craniovertebralAngle >= 45 {
             self.humpSeverity = .mild
-            // Score 60-79
-            self.overallScore = Int(60 + (craniovertebralAngle - 45) * 4)
+            // Score 60-84
+            self.overallScore = Int(60 + (craniovertebralAngle - 45) * 3)
         } else if craniovertebralAngle >= 40 {
             self.humpSeverity = .moderate
             // Score 40-59
@@ -126,11 +143,11 @@ enum HumpSeverity: String, CaseIterable {
         }
     }
     
-    /// Research-backed CVA threshold for this severity
+    /// Research-backed CVA threshold for this severity (Titcomb et al. 2024)
     var cvaThreshold: String {
         switch self {
-        case .minimal: return "CVA ≥ 50°"
-        case .mild: return "CVA 45-50°"
+        case .minimal: return "CVA > 53°"
+        case .mild: return "CVA 45-53°"
         case .moderate: return "CVA 40-45°"
         case .severe: return "CVA < 40°"
         }
@@ -193,6 +210,10 @@ struct SideProfilePose {
     let hip: CGPoint?           // Hip position (for full posture context)
     let nose: CGPoint?          // Nose (backup for head position)
     
+    // Confidence scores (0.0 - 1.0)
+    var earConfidence: Float = 0.0
+    var shoulderConfidence: Float = 0.0
+    
     var isValid: Bool {
         // Need at least ear/nose and shoulder for neck hump analysis
         let hasHead = ear != nil || nose != nil
@@ -203,6 +224,18 @@ struct SideProfilePose {
     var headPoint: CGPoint? {
         // Prefer ear, fallback to nose
         ear ?? nose
+    }
+    
+    /// Overall confidence score (average of ear and shoulder)
+    var overallConfidence: Float {
+        let earConf = ear != nil ? earConfidence : 0.0
+        let shoulderConf = shoulder != nil ? shoulderConfidence : 0.0
+        return (earConf + shoulderConf) / 2.0
+    }
+    
+    /// Whether the detection is confident enough for accurate analysis
+    var isHighConfidence: Bool {
+        return earConfidence >= 0.6 && shoulderConfidence >= 0.6
     }
     
     /// Calculate forward head distance in normalized coordinates
@@ -226,10 +259,15 @@ struct SideProfilePose {
         // the measurement isn't valid for this analysis
         guard dy > 0.01 else { return nil }
         
-        // Angle from vertical: atan(horizontal/vertical) * 180/π
-        // 0° = ear directly above shoulder (perfect)
-        // Positive = ear is forward/ahead of shoulder
-        let angleRadians = atan2(Double(abs(dx)), Double(dy))
+        // Calculate CVA (Craniovertebral Angle) directly
+        // CVA = angle between horizontal line through shoulder and line to ear
+        // Using atan2 to get angle from horizontal
+        // dy = vertical distance (shoulder to ear, positive = ear is above)
+        // dx = horizontal distance (positive = ear is in front)
+        
+        // atan2(dy, dx) gives angle from horizontal
+        // We want angle from horizontal to the ear-shoulder line
+        let angleRadians = atan2(Double(dy), Double(abs(dx)))
         return angleRadians * 180.0 / .pi
     }
 }
