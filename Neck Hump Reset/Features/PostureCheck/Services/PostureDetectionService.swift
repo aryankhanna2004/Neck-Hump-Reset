@@ -385,8 +385,8 @@ class PostureDetectionService: ObservableObject {
         
         // === EAR SELECTION ===
         // Store BOTH ears for user selection
-        let leftEarPoint = leftEarValid ? normalizePoint(leftEar.position, imageSize: imageSize) : nil
-        let rightEarPoint = rightEarValid ? normalizePoint(rightEar.position, imageSize: imageSize) : nil
+        var leftEarPoint = leftEarValid ? normalizePoint(leftEar.position, imageSize: imageSize) : nil
+        var rightEarPoint = rightEarValid ? normalizePoint(rightEar.position, imageSize: imageSize) : nil
         
         let earConfDiff = abs(leftEar.inFrameLikelihood - rightEar.inFrameLikelihood)
         let earXDiff = abs(leftEar.position.x - rightEar.position.x)
@@ -396,6 +396,43 @@ class PostureDetectionService: ObservableObject {
         print("      Left: X=\(leftEar.position.x), Y=\(leftEar.position.y), Conf=\(leftEar.inFrameLikelihood)")
         print("      Right: X=\(rightEar.position.x), Y=\(rightEar.position.y), Conf=\(rightEar.inFrameLikelihood)")
         print("      Differences: X=\(earXDiff)px, Y=\(earYDiff)px, Conf=\(earConfDiff)")
+        
+        // Log normalized coordinates for debugging offset issues
+        if let leftNorm = leftEarPoint {
+            print("      Left ear normalized (before adjustment): (\(leftNorm.x), \(leftNorm.y))")
+        }
+        if let rightNorm = rightEarPoint {
+            print("      Right ear normalized (before adjustment): (\(rightNorm.x), \(rightNorm.y))")
+        }
+        
+        // Apply offset to move ear away from face (toward back of head)
+        // ML Kit detects slightly toward the face, so we adjust away from face
+        // Apply to BOTH ears so user selection works correctly
+        let earOffsetAwayFromFace: CGFloat = 0.008 // 0.8% adjustment away from face
+        
+        if facingRight {
+            // Facing RIGHT → ears detected too far RIGHT (toward face) → move LEFT (away from face)
+            if var leftPoint = leftEarPoint {
+                leftPoint.x -= earOffsetAwayFromFace
+                leftEarPoint = leftPoint
+            }
+            if var rightPoint = rightEarPoint {
+                rightPoint.x -= earOffsetAwayFromFace
+                rightEarPoint = rightPoint
+            }
+            print("      Adjusted both ears LEFT (away from face) for RIGHT-facing person")
+        } else {
+            // Facing LEFT → ears detected too far LEFT (toward face) → move RIGHT (away from face)
+            if var leftPoint = leftEarPoint {
+                leftPoint.x += earOffsetAwayFromFace
+                leftEarPoint = leftPoint
+            }
+            if var rightPoint = rightEarPoint {
+                rightPoint.x += earOffsetAwayFromFace
+                rightEarPoint = rightPoint
+            }
+            print("      Adjusted both ears RIGHT (away from face) for LEFT-facing person")
+        }
         
         // Auto-select: use the ear with HIGHER confidence (user can override later)
         var earPoint: CGPoint?
@@ -418,6 +455,11 @@ class PostureDetectionService: ObservableObject {
             earConfidence = leftEar.inFrameLikelihood
             selectedEar = .left
             print("📍 Auto-selected LEFT ear (only one valid)")
+        }
+        
+        // Log final selected ear position
+        if let finalEar = earPoint {
+            print("📍 Final ear position (normalized, after adjustment): (\(finalEar.x), \(finalEar.y))")
         }
         
         // === SHOULDER - Just get the raw position, C7 will be found via body segmentation ===
@@ -464,6 +506,12 @@ class PostureDetectionService: ObservableObject {
         // Normalize to 0-1 range for consistent display
         let x = position.x / imageSize.width
         let y = position.y / imageSize.height
+        
+        // Debug: Log if coordinates seem off (outside reasonable bounds)
+        if x < 0 || x > 1 || y < 0 || y > 1 {
+            print("⚠️ Warning: Normalized coordinate out of bounds: (\(x), \(y)) from pixel (\(position.x), \(position.y)) with imageSize \(imageSize)")
+        }
+        
         return CGPoint(x: x, y: y)
     }
     
