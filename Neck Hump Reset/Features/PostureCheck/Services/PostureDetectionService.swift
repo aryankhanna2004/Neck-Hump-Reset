@@ -55,7 +55,7 @@ class PostureDetectionService: ObservableObject {
     private var recentPoses: [SideProfilePose] = []
     private let stabilityThreshold = 5
     
-    // ML Kit detector
+    // ML Kit detector - using singleImage mode for highest accuracy
     private var poseDetector: PoseDetector?
     
     // MARK: - Init
@@ -64,13 +64,14 @@ class PostureDetectionService: ObservableObject {
     }
     
     private func setupDetector() {
-        // Use accurate detector with stream mode for real-time processing
+        // Use accurate detector with singleImage mode for highest accuracy
+        // singleImage mode runs fresh detection on each image (no tracking state)
         let options = AccuratePoseDetectorOptions()
-        options.detectorMode = .stream
-        
+        options.detectorMode = .singleImage
         poseDetector = PoseDetector.poseDetector(options: options)
+        
         isModelReady = true
-        print("✅ ML Kit Pose Detector initialized")
+        print("✅ ML Kit Pose Detector initialized (singleImage mode)")
     }
     
     /// Pre-warm the model by running a dummy detection
@@ -128,36 +129,31 @@ class PostureDetectionService: ObservableObject {
                 if let shoulder = pose.shoulder, let ear = pose.ear {
                     let uiImage = UIImage(cgImage: image)
                     
-                    // Determine facing direction based on ear position relative to shoulder
-                    // If ear is to the right of shoulder, person is facing right
-                    let facingDirection: FacingDirection = ear.x > shoulder.x ? .right : .left
+                    // Use the facing direction from signal algorithm
+                    let facingDirection = pose.facingDirection ?? (ear.x > shoulder.x ? .right : .left)
                     
-                    // Find the back edge of the body at shoulder height
-                    if let backEdgeX = await findBodyBackEdge(in: uiImage, atNormalizedY: shoulder.y, facingDirection: facingDirection) {
-                        // C7 is at the back edge of the body, at shoulder height
-                        // Move slightly inward from the edge (the edge is the skin, C7 is slightly inside)
-                        let c7Offset: CGFloat = 0.01 // 1% inward from edge
-                        let c7X: CGFloat
-                        switch facingDirection {
-                        case .right:
-                            c7X = backEdgeX + c7Offset // Move right from left edge
-                        case .left:
-                            c7X = backEdgeX - c7Offset // Move left from right edge
-                        }
-                        
-                        // C7 is typically at or slightly above shoulder height
-                        let c7Y = shoulder.y - 0.01 // Slightly above shoulder
-                        
-                        improvedPose.shoulder = CGPoint(x: c7X, y: c7Y)
-                        print("📍 Improved C7 estimate using body segmentation: (\(c7X), \(c7Y))")
+                    // Start from the original shoulder Y (before any offset)
+                    // and scan UP along the body edge to find C7
+                    let originalShoulderY = pose.originalShoulderY ?? shoulder.y
+                    
+                    // Find C7 by scanning up from shoulder along the body back edge
+                    // C7 is typically 8-12% of image height above the shoulder
+                    if let c7Point = await findC7AlongBodyEdge(
+                        in: uiImage,
+                        fromShoulderY: originalShoulderY,
+                        facingDirection: facingDirection
+                    ) {
+                        improvedPose.shoulder = c7Point
+                        print("📍 Improved C7 using body edge scan: (\(c7Point.x), \(c7Point.y))")
                     }
+                    // If body segmentation fails, keep the original C7 estimate from extractSideProfilePose
                 }
                 
                 let result = calculateNeckHumpMetrics(from: improvedPose)
                 analysisResult = result
                 currentPose = improvedPose
                 detectionState = .complete
-                print("✅ Pose analysis complete - CVA: \(result.craniovertebralAngle)°")
+                print("✅ Pose analysis complete - Facing: \(improvedPose.facingDirection), CVA: \(result.craniovertebralAngle)°")
             } else {
                 errorMessage = "Could not detect pose. Please ensure your side profile is visible."
                 detectionState = .positioning
@@ -239,6 +235,9 @@ class PostureDetectionService: ObservableObject {
         liveShoulderPoint = nil
         liveHipPoint = nil
         liveIdealLine = nil
+        
+        // Recreate detector for fresh state
+        setupDetector()
     }
     
     // MARK: - Private Methods
@@ -249,12 +248,28 @@ class PostureDetectionService: ObservableObject {
             throw PoseError.detectorNotInitialized
         }
         
+        // Create UIImage from CGImage
+        // Note: After normalization in CameraManager, the image should be in .up orientation
         let uiImage = UIImage(cgImage: cgImage)
         let visionImage = VisionImage(image: uiImage)
+        
+        // CRITICAL: After normalization, image is always .up orientation
+        // ML Kit needs to know the orientation to correctly interpret coordinates
         visionImage.orientation = .up
         
-        // Get image size for coordinate normalization
+        // CRITICAL: Use CGImage pixel dimensions directly
+        // ML Kit returns coordinates in pixel space relative to the CGImage dimensions
+        // After normalization, CGImage dimensions are what ML Kit sees
         let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+        
+        // Debug logging to verify dimensions
+        print("📐 Image dimensions for ML Kit:")
+        print("   CGImage (pixels): \(cgImage.width)x\(cgImage.height)")
+        print("   UIImage size (points): \(uiImage.size.width)x\(uiImage.size.height)")
+        print("   UIImage scale: \(uiImage.scale)")
+        print("   UIImage pixels (size*scale): \(uiImage.size.width * uiImage.scale)x\(uiImage.size.height * uiImage.scale)")
+        print("   Using for coordinate normalization: \(imageSize.width)x\(imageSize.height)")
+        print("   Orientation: \(uiImage.imageOrientation.rawValue) (should be 0/.up after normalization)")
         
         // Run ML Kit on background thread
         let poses = try detector.results(in: visionImage)
@@ -269,111 +284,177 @@ class PostureDetectionService: ObservableObject {
     /// Extract pose points from ML Kit Pose
     /// ML Kit uses image coordinates, we convert to normalized 0-1 coordinates
     private nonisolated func extractSideProfilePose(from pose: Pose, imageSize: CGSize = CGSize(width: 1, height: 1)) -> SideProfilePose {
-        // For side profile, use the ear with higher confidence
-        var earPoint: CGPoint?
-        var earConfidence: Float = 0.0
+        // Get all landmarks
         let leftEar = pose.landmark(ofType: .leftEar)
         let rightEar = pose.landmark(ofType: .rightEar)
-        
-        // Pick the ear that's more visible (higher confidence)
-        if leftEar.inFrameLikelihood > rightEar.inFrameLikelihood && leftEar.inFrameLikelihood > 0.3 {
-            earPoint = normalizePoint(leftEar.position, imageSize: imageSize)
-            earConfidence = leftEar.inFrameLikelihood
-            print("📍 Using left ear (confidence: \(leftEar.inFrameLikelihood))")
-        } else if rightEar.inFrameLikelihood > 0.3 {
-            earPoint = normalizePoint(rightEar.position, imageSize: imageSize)
-            earConfidence = rightEar.inFrameLikelihood
-            print("📍 Using right ear (confidence: \(rightEar.inFrameLikelihood))")
-        }
-        
-        // For C7 estimation in side profile:
-        // ML Kit detects shoulder joints (acromion), but CVA research uses C7 vertebra
-        // C7 is at the base of the neck - in a side profile, it's roughly:
-        // - At the same X position as the visible shoulder (or slightly toward center of body)
-        // - At approximately shoulder height
-        //
-        // Since we can't detect C7 directly, we estimate it from the visible shoulder
-        // and allow the user to manually adjust if needed.
-        var shoulderPoint: CGPoint?
-        var shoulderConfidence: Float = 0.0
         let leftShoulder = pose.landmark(ofType: .leftShoulder)
         let rightShoulder = pose.landmark(ofType: .rightShoulder)
+        let nose = pose.landmark(ofType: .nose)
+        let leftEye = pose.landmark(ofType: .leftEye)
+        let rightEye = pose.landmark(ofType: .rightEye)
         
+        // Log all landmarks with confidence
+        print("🔍 Pose Detection:")
+        print("   Left ear - X: \(leftEar.position.x), Y: \(leftEar.position.y), Conf: \(leftEar.inFrameLikelihood)")
+        print("   Right ear - X: \(rightEar.position.x), Y: \(rightEar.position.y), Conf: \(rightEar.inFrameLikelihood)")
+        print("   Left shoulder - X: \(leftShoulder.position.x), Y: \(leftShoulder.position.y), Conf: \(leftShoulder.inFrameLikelihood)")
+        print("   Right shoulder - X: \(rightShoulder.position.x), Y: \(rightShoulder.position.y), Conf: \(rightShoulder.inFrameLikelihood)")
+        
+        // Validity thresholds
+        let leftEarValid = leftEar.inFrameLikelihood > 0.3
+        let rightEarValid = rightEar.inFrameLikelihood > 0.3
         let leftShoulderValid = leftShoulder.inFrameLikelihood > 0.3
         let rightShoulderValid = rightShoulder.inFrameLikelihood > 0.3
+        let noseValid = nose.inFrameLikelihood > 0.3
+        let leftEyeValid = leftEye.inFrameLikelihood > 0.3
+        let rightEyeValid = rightEye.inFrameLikelihood > 0.3
         
-        // Determine which side the person is facing based on ear visibility
-        let facingLeft = leftEar.inFrameLikelihood > rightEar.inFrameLikelihood
+        // === FACING DIRECTION using signal algorithm ===
+        var orientationScore: Float = 0.0
         
-        if leftShoulderValid && rightShoulderValid {
-            // Both shoulders visible - estimate C7 as midpoint between shoulders, moved up
-            let leftPoint = normalizePoint(leftShoulder.position, imageSize: imageSize)
-            let rightPoint = normalizePoint(rightShoulder.position, imageSize: imageSize)
-            
-            let midX = (leftPoint.x + rightPoint.x) / 2
-            let midY = (leftPoint.y + rightPoint.y) / 2
-            let shoulderWidth = abs(rightPoint.x - leftPoint.x)
-            let c7OffsetY = shoulderWidth * 0.12 // Move up slightly
-            
-            shoulderPoint = CGPoint(x: midX, y: midY - c7OffsetY)
-            shoulderConfidence = min(leftShoulder.inFrameLikelihood, rightShoulder.inFrameLikelihood)
-            print("📍 Estimated C7 from both shoulders (confidence: \(shoulderConfidence))")
-        } else if leftShoulderValid || rightShoulderValid {
-            // Only one shoulder visible (typical side profile)
-            // Use the visible shoulder but adjust toward where C7 would be
-            let visibleShoulder = leftShoulderValid ? leftShoulder : rightShoulder
-            let rawPoint = normalizePoint(visibleShoulder.position, imageSize: imageSize)
-            
-            // C7 is more toward the center of the body than the shoulder joint
-            // In a side profile facing right: C7 is to the LEFT of the visible (left) shoulder
-            // In a side profile facing left: C7 is to the RIGHT of the visible (right) shoulder
-            // We shift the X position slightly toward the center (toward where the spine would be)
-            
-            // Estimate: C7 is about 8-12% of image width toward center from shoulder
-            let c7ShiftX: CGFloat = 0.08 // 8% shift toward body center
-            
-            var adjustedX = rawPoint.x
-            if leftShoulderValid {
-                // Left shoulder visible - person likely facing right
-                // C7 is to the right of the left shoulder (toward center)
-                adjustedX = rawPoint.x + c7ShiftX
+        // Signal 1: Nose position relative to ears (strongest signal)
+        if noseValid && (leftEarValid || rightEarValid) {
+            var earMidX: CGFloat = 0
+            if leftEarValid && rightEarValid {
+                earMidX = (leftEar.position.x + rightEar.position.x) / 2
+            } else if leftEarValid {
+                earMidX = leftEar.position.x
             } else {
-                // Right shoulder visible - person likely facing left
-                // C7 is to the left of the right shoulder (toward center)
-                adjustedX = rawPoint.x - c7ShiftX
+                earMidX = rightEar.position.x
             }
             
-            // C7 is also slightly higher than the shoulder joint
-            // Angle slightly upward (~95° instead of 90° horizontal)
-            // This means moving up more than just straight horizontal
-            let adjustedY = rawPoint.y - 0.06 // Move up 6% (angled upward ~5°)
+            let noseToEarX = nose.position.x - earMidX
+            if noseToEarX > 10 {
+                orientationScore += 3.0 // Nose to right of ears → facing right
+            } else if noseToEarX < -10 {
+                orientationScore -= 3.0 // Nose to left of ears → facing left
+            }
+            print("   📊 Signal: Nose to ears (diff: \(noseToEarX)px) → score: \(orientationScore)")
+        }
+        
+        // Signal 2: Eye positions relative to ears
+        if (leftEyeValid || rightEyeValid) && (leftEarValid || rightEarValid) {
+            var eyeMidX: CGFloat = 0
+            if leftEyeValid && rightEyeValid {
+                eyeMidX = (leftEye.position.x + rightEye.position.x) / 2
+            } else if leftEyeValid {
+                eyeMidX = leftEye.position.x
+            } else {
+                eyeMidX = rightEye.position.x
+            }
             
-            shoulderPoint = CGPoint(x: adjustedX, y: adjustedY)
+            var earMidX: CGFloat = 0
+            if leftEarValid && rightEarValid {
+                earMidX = (leftEar.position.x + rightEar.position.x) / 2
+            } else if leftEarValid {
+                earMidX = leftEar.position.x
+            } else {
+                earMidX = rightEar.position.x
+            }
+            
+            let eyeToEarX = eyeMidX - earMidX
+            if eyeToEarX > 10 {
+                orientationScore += 2.0 // Eyes to right of ears → facing right
+            } else if eyeToEarX < -10 {
+                orientationScore -= 2.0 // Eyes to left of ears → facing left
+            }
+            print("   📊 Signal: Eyes to ears (diff: \(eyeToEarX)px) → score: \(orientationScore)")
+        }
+        
+        // Signal 3: Shoulder visibility/confidence difference
+        if leftShoulderValid && !rightShoulderValid {
+            orientationScore += 1.0 // Only left shoulder visible → facing right
+        } else if rightShoulderValid && !leftShoulderValid {
+            orientationScore -= 1.0 // Only right shoulder visible → facing left
+        } else if leftShoulderValid && rightShoulderValid {
+            let confDiff = leftShoulder.inFrameLikelihood - rightShoulder.inFrameLikelihood
+            orientationScore += confDiff * 0.5
+        }
+        print("   📊 Signal: Shoulder visibility → score: \(orientationScore)")
+        
+        // Signal 4: Ear visibility/confidence difference
+        if leftEarValid && !rightEarValid {
+            orientationScore += 0.5 // Only left ear visible → facing right
+        } else if rightEarValid && !leftEarValid {
+            orientationScore -= 0.5 // Only right ear visible → facing left
+        }
+        print("   📊 Signal: Ear visibility → score: \(orientationScore)")
+        
+        let facingRight = orientationScore >= 0
+        print("📍 Facing direction score: \(orientationScore) → \(facingRight ? "RIGHT" : "LEFT")")
+        
+        // === EAR SELECTION ===
+        // Store BOTH ears for user selection
+        let leftEarPoint = leftEarValid ? normalizePoint(leftEar.position, imageSize: imageSize) : nil
+        let rightEarPoint = rightEarValid ? normalizePoint(rightEar.position, imageSize: imageSize) : nil
+        
+        let earConfDiff = abs(leftEar.inFrameLikelihood - rightEar.inFrameLikelihood)
+        let earXDiff = abs(leftEar.position.x - rightEar.position.x)
+        let earYDiff = abs(leftEar.position.y - rightEar.position.y)
+        
+        print("   👂 Ear Analysis:")
+        print("      Left: X=\(leftEar.position.x), Y=\(leftEar.position.y), Conf=\(leftEar.inFrameLikelihood)")
+        print("      Right: X=\(rightEar.position.x), Y=\(rightEar.position.y), Conf=\(rightEar.inFrameLikelihood)")
+        print("      Differences: X=\(earXDiff)px, Y=\(earYDiff)px, Conf=\(earConfDiff)")
+        
+        // Auto-select: use the ear with HIGHER confidence (user can override later)
+        var earPoint: CGPoint?
+        var earConfidence: Float = 0.0
+        var selectedEar: EarSelection? = nil
+        
+        if leftEar.inFrameLikelihood > rightEar.inFrameLikelihood && leftEarValid {
+            earPoint = leftEarPoint
+            earConfidence = leftEar.inFrameLikelihood
+            selectedEar = .left
+            print("📍 Auto-selected LEFT ear (higher confidence: \(leftEar.inFrameLikelihood) > \(rightEar.inFrameLikelihood))")
+        } else if rightEarValid {
+            earPoint = rightEarPoint
+            earConfidence = rightEar.inFrameLikelihood
+            selectedEar = .right
+            print("📍 Auto-selected RIGHT ear (higher confidence: \(rightEar.inFrameLikelihood) > \(leftEar.inFrameLikelihood))")
+        } else if leftEarValid {
+            // Fallback: only left ear valid
+            earPoint = leftEarPoint
+            earConfidence = leftEar.inFrameLikelihood
+            selectedEar = .left
+            print("📍 Auto-selected LEFT ear (only one valid)")
+        }
+        
+        // === SHOULDER - Just get the raw position, C7 will be found via body segmentation ===
+        // Use the shoulder with higher confidence
+        var shoulderPoint: CGPoint?
+        var shoulderConfidence: Float = 0.0
+        var originalShoulderY: CGFloat = 0
+        
+        let useLeftShoulder = leftShoulder.inFrameLikelihood >= rightShoulder.inFrameLikelihood
+        let visibleShoulder = useLeftShoulder ? leftShoulder : rightShoulder
+        
+        if visibleShoulder.inFrameLikelihood > 0.3 {
+            let rawPoint = normalizePoint(visibleShoulder.position, imageSize: imageSize)
+            originalShoulderY = rawPoint.y
+            
+            // Just use the raw shoulder point as initial estimate
+            // The actual C7 will be found via body segmentation in analyzeImage
+            shoulderPoint = rawPoint
             shoulderConfidence = visibleShoulder.inFrameLikelihood
-            print("📍 Estimated C7 from single shoulder, adjusted toward spine (confidence: \(shoulderConfidence))")
+            print("📍 Using \(useLeftShoulder ? "LEFT" : "RIGHT") shoulder (conf: \(shoulderConfidence))")
         }
         
-        // Hip - for posture reference
-        var hipPoint: CGPoint?
-        let leftHip = pose.landmark(ofType: .leftHip)
-        let rightHip = pose.landmark(ofType: .rightHip)
+        let facingDirection: FacingDirection = facingRight ? .right : .left
         
-        if leftHip.inFrameLikelihood > rightHip.inFrameLikelihood && leftHip.inFrameLikelihood > 0.3 {
-            hipPoint = normalizePoint(leftHip.position, imageSize: imageSize)
-        } else if rightHip.inFrameLikelihood > 0.3 {
-            hipPoint = normalizePoint(rightHip.position, imageSize: imageSize)
-        }
-        
-        // Nose - can be used as head reference
-        var nosePoint: CGPoint?
-        let nose = pose.landmark(ofType: .nose)
-        if nose.inFrameLikelihood > 0.3 {
-            nosePoint = normalizePoint(nose.position, imageSize: imageSize)
-        }
-        
-        var result = SideProfilePose(ear: earPoint, shoulder: shoulderPoint, hip: hipPoint, nose: nosePoint)
+        var result = SideProfilePose(ear: earPoint, shoulder: shoulderPoint, hip: nil, nose: nil)
         result.earConfidence = earConfidence
         result.shoulderConfidence = shoulderConfidence
+        result.facingDirection = facingDirection
+        result.originalShoulderY = originalShoulderY
+        
+        // Store both ears for user selection
+        result.leftEar = leftEarPoint
+        result.rightEar = rightEarPoint
+        result.leftEarConfidence = leftEarValid ? leftEar.inFrameLikelihood : 0.0
+        result.rightEarConfidence = rightEarValid ? rightEar.inFrameLikelihood : 0.0
+        result.selectedEar = selectedEar
+        
         return result
     }
     
@@ -501,6 +582,14 @@ class PostureDetectionService: ObservableObject {
         )
     }
     
+    /// Recalculate metrics with a specific ear position
+    func calculateNeckHumpMetrics(ear: CGPoint, shoulder: CGPoint, facingDirection: FacingDirection) -> NeckHumpAnalysisResult {
+        // Create a temporary pose with the selected ear
+        var tempPose = SideProfilePose(ear: ear, shoulder: shoulder, hip: nil, nose: nil)
+        tempPose.facingDirection = facingDirection
+        return calculateNeckHumpMetrics(from: tempPose)
+    }
+    
     /// Get image orientation for ML Kit based on device orientation
     private nonisolated func imageOrientation(
         deviceOrientation: UIDeviceOrientation,
@@ -523,6 +612,96 @@ class PostureDetectionService: ObservableObject {
     }
     
     // MARK: - Body Segmentation for C7 Estimation
+    
+    /// Find C7 position by scanning up from shoulder along the body back edge
+    /// C7 is at the base of the neck, where the neck meets the upper back
+    func findC7AlongBodyEdge(in image: UIImage, fromShoulderY: CGFloat, facingDirection: FacingDirection) async -> CGPoint? {
+        guard let cgImage = image.cgImage else { return nil }
+        
+        return await withCheckedContinuation { continuation in
+            let request = VNGeneratePersonSegmentationRequest()
+            request.qualityLevel = .balanced
+            
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            
+            do {
+                try handler.perform([request])
+                
+                guard let result = request.results?.first else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                
+                let maskBuffer = result.pixelBuffer
+                let maskWidth = CVPixelBufferGetWidth(maskBuffer)
+                let maskHeight = CVPixelBufferGetHeight(maskBuffer)
+                
+                CVPixelBufferLockBaseAddress(maskBuffer, .readOnly)
+                defer { CVPixelBufferUnlockBaseAddress(maskBuffer, .readOnly) }
+                
+                guard let baseAddress = CVPixelBufferGetBaseAddress(maskBuffer) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                
+                let bytesPerRow = CVPixelBufferGetBytesPerRow(maskBuffer)
+                let threshold: UInt8 = 128
+                
+                // Convert normalized Y to mask coordinates
+                let shoulderRowInMask = Int(fromShoulderY * CGFloat(maskHeight))
+                
+                // C7 is only 2-3cm above the shoulder joint
+                // In a photo, this is typically 2-3% of image height, not 10%
+                // Scan from shoulder up a small amount to find C7 at the base of the neck
+                let c7OffsetRows = Int(0.025 * CGFloat(maskHeight)) // 2.5% up from shoulder (much smaller offset)
+                let targetRow = max(0, shoulderRowInMask - c7OffsetRows)
+                
+                print("📍 C7 scan: shoulder at row \(shoulderRowInMask), scanning up \(c7OffsetRows) rows to row \(targetRow)")
+                
+                // Find the back edge at the target C7 height
+                let rowStart = baseAddress.advanced(by: targetRow * bytesPerRow)
+                let pixels = rowStart.assumingMemoryBound(to: UInt8.self)
+                
+                var edgeX: Int? = nil
+                
+                switch facingDirection {
+                case .right:
+                    // Scan from left to find first person pixel (back edge)
+                    for x in 0..<maskWidth {
+                        if pixels[x] > threshold {
+                            edgeX = x
+                            break
+                        }
+                    }
+                case .left:
+                    // Scan from right to find first person pixel (back edge)
+                    for x in stride(from: maskWidth - 1, through: 0, by: -1) {
+                        if pixels[x] > threshold {
+                            edgeX = x
+                            break
+                        }
+                    }
+                }
+                
+                if let edge = edgeX {
+                    // C7 is EXACTLY on the body edge - no inward offset
+                    // Return normalized coordinates
+                    let normalizedX = CGFloat(edge) / CGFloat(maskWidth)
+                    let normalizedY = CGFloat(targetRow) / CGFloat(maskHeight)
+                    
+                    print("📍 C7 on body edge at: X=\(normalizedX), Y=\(normalizedY)")
+                    continuation.resume(returning: CGPoint(x: normalizedX, y: normalizedY))
+                } else {
+                    print("⚠️ Could not find body edge at C7 height")
+                    continuation.resume(returning: nil)
+                }
+                
+            } catch {
+                print("❌ Person segmentation failed: \(error)")
+                continuation.resume(returning: nil)
+            }
+        }
+    }
     
     /// Find the back edge of the body at a given Y position using person segmentation
     /// This helps estimate C7 position more accurately regardless of zoom level
@@ -604,11 +783,6 @@ class PostureDetectionService: ObservableObject {
                 continuation.resume(returning: nil)
             }
         }
-    }
-    
-    enum FacingDirection {
-        case left
-        case right
     }
 }
 

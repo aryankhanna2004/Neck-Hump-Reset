@@ -40,6 +40,11 @@ struct MainTabView: View {
             .tag(MainTab.progress)
         }
         .tint(AppTheme.Colors.accentCyan)
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToExercises)) { _ in
+            withAnimation {
+                viewModel.selectedTab = .exercises
+            }
+        }
     }
 }
 

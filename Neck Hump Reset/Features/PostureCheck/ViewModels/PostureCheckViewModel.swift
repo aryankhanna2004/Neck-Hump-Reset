@@ -36,6 +36,13 @@ class PostureCheckViewModel: ObservableObject {
     @Published var isEditingPoints: Bool = false
     @Published var selectedPointToEdit: EditablePoint? = nil
     
+    // Both ear positions for user selection
+    @Published var leftEarPoint: CGPoint?
+    @Published var rightEarPoint: CGPoint?
+    @Published var leftEarConfidence: Float = 0.0
+    @Published var rightEarConfidence: Float = 0.0
+    @Published var selectedEar: EarSelection? = nil
+    
     // Confidence tracking
     @Published var detectionConfidence: Float = 0.0
     @Published var isLowConfidence: Bool = false
@@ -119,9 +126,9 @@ class PostureCheckViewModel: ObservableObject {
     }
     
     func retake() {
+        // Clear all state first
         analysisResult = nil
         errorMessage = nil
-        postureService.reset()
         countdownValue = nil
         isCountingDown = false
         capturedPhoto = nil
@@ -132,7 +139,25 @@ class PostureCheckViewModel: ObservableObject {
         selectedPointToEdit = nil
         isSaved = false
         selectedPhotoItem = nil  // Reset photo picker selection
+        detectionConfidence = 0.0
+        isLowConfidence = false
+        showLowConfidenceWarning = false
+        
+        // Reset ear selection
+        leftEarPoint = nil
+        rightEarPoint = nil
+        leftEarConfidence = 0.0
+        rightEarConfidence = 0.0
+        selectedEar = nil
+        
+        // Reset posture service to clear ML Kit tracking state
+        // This recreates the detector for fresh detection
+        postureService.reset()
+        
+        // Clear camera manager state
         cameraManager.clearCapturedImage()
+        
+        print("🔄 Retake: All state reset, ready for new capture")
         
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             currentState = .positioning
@@ -142,19 +167,40 @@ class PostureCheckViewModel: ObservableObject {
     func done() {
         stopCamera()
         cancelCountdown()
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            currentState = .instructions
-        }
+        
+        // Clear all state
         analysisResult = nil
-        postureService.reset()
+        errorMessage = nil
         capturedPhoto = nil
         capturedPhotoData = nil
         editableEarPoint = nil
         editableShoulderPoint = nil
         isEditingPoints = false
+        selectedPointToEdit = nil
         isSaved = false
         selectedPhotoItem = nil  // Reset photo picker selection
+        detectionConfidence = 0.0
+        isLowConfidence = false
+        showLowConfidenceWarning = false
+        
+        // Reset ear selection
+        leftEarPoint = nil
+        rightEarPoint = nil
+        leftEarConfidence = 0.0
+        rightEarConfidence = 0.0
+        selectedEar = nil
+        
+        // Reset posture service to clear ML Kit tracking state
+        postureService.reset()
+        
+        // Clear camera manager state
         cameraManager.clearCapturedImage()
+        
+        print("🔄 Done: All state reset")
+        
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            currentState = .instructions
+        }
     }
     
     // MARK: - Photo Library Import
@@ -162,14 +208,37 @@ class PostureCheckViewModel: ObservableObject {
     func handleSelectedPhoto(_ item: PhotosPickerItem?) async {
         guard let item = item else { return }
         
-        // Immediately transition to analyzing state
+        // IMPORTANT: Reset everything before processing new photo
+        // This ensures we get fresh detection without any cached state
         await MainActor.run {
+            // Clear all previous state
+            analysisResult = nil
+            errorMessage = nil
+            capturedPhoto = nil
+            capturedPhotoData = nil
+            editableEarPoint = nil
+            editableShoulderPoint = nil
+            isEditingPoints = false
+            selectedPointToEdit = nil
+            isSaved = false
+            detectionConfidence = 0.0
+            isLowConfidence = false
+            
+            // Reset the posture service to clear ML Kit tracking state
+            postureService.reset()
+            
+            // Clear camera manager state
+            cameraManager.clearCapturedImage()
+            
+            // Now transition to analyzing state
             withAnimation {
                 currentState = .analyzing
                 isAnalyzing = true
             }
             // Clear the selection immediately so picker dismisses
             selectedPhotoItem = nil
+            
+            print("🔄 State reset complete, ready for new photo analysis")
         }
         
         do {
@@ -338,8 +407,14 @@ class PostureCheckViewModel: ObservableObject {
                 self.editableEarPoint = result.earPosition
                 self.editableShoulderPoint = result.shoulderPosition
                 
-                // Check confidence from the pose
+                // Store both ears for user selection
                 if let pose = postureService.currentPose {
+                    self.leftEarPoint = pose.leftEar
+                    self.rightEarPoint = pose.rightEar
+                    self.leftEarConfidence = pose.leftEarConfidence
+                    self.rightEarConfidence = pose.rightEarConfidence
+                    self.selectedEar = pose.selectedEar
+                    
                     self.detectionConfidence = pose.overallConfidence
                     self.isLowConfidence = !pose.isHighConfidence
                     self.showLowConfidenceWarning = !pose.isHighConfidence
@@ -363,6 +438,54 @@ class PostureCheckViewModel: ObservableObject {
     func retakeForBetterDetection() {
         showLowConfidenceWarning = false
         retake()
+    }
+    
+    // MARK: - Ear Selection
+    
+    func switchToLeftEar() {
+        guard let leftEar = leftEarPoint else { return }
+        selectedEar = .left
+        editableEarPoint = leftEar
+        recalculateWithSelectedEar()
+    }
+    
+    func switchToRightEar() {
+        guard let rightEar = rightEarPoint else { return }
+        selectedEar = .right
+        editableEarPoint = rightEar
+        recalculateWithSelectedEar()
+    }
+    
+    private func recalculateWithSelectedEar() {
+        guard let selectedEar = selectedEar,
+              let pose = postureService.currentPose else { return }
+        
+        // Update the pose with selected ear
+        var updatedPose = pose
+        let newEarPoint: CGPoint?
+        let newEarConfidence: Float
+        
+        switch selectedEar {
+        case .left:
+            newEarPoint = pose.leftEar
+            newEarConfidence = pose.leftEarConfidence
+        case .right:
+            newEarPoint = pose.rightEar
+            newEarConfidence = pose.rightEarConfidence
+        }
+        
+        updatedPose.selectedEar = selectedEar
+        // Note: We can't directly modify the ear property as it's let, so we'll recalculate from the service
+        
+        // Recalculate metrics with the selected ear
+        if let newEar = newEarPoint, let shoulder = editableShoulderPoint {
+            let result = postureService.calculateNeckHumpMetrics(
+                ear: newEar,
+                shoulder: shoulder,
+                facingDirection: pose.facingDirection
+            )
+            analysisResult = result
+        }
     }
 }
 

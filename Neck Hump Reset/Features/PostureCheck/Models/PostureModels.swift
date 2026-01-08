@@ -203,16 +203,34 @@ enum HumpSeverity: String, CaseIterable {
 /// Represents detected body points from Apple's Vision framework
 /// Note: Vision returns normalized coordinates (0.0-1.0) with origin at BOTTOM-LEFT
 /// We convert to standard UI coordinates (origin top-left) by flipping Y: newY = 1 - y
+enum EarSelection: String, CaseIterable {
+    case left = "Left Ear"
+    case right = "Right Ear"
+}
+
 struct SideProfilePose {
     // Key points for side view analysis (already converted to UI coordinates)
-    let ear: CGPoint?           // Ear position (represents head position)
+    let ear: CGPoint?           // Ear position (represents head position) - selected ear
     var shoulder: CGPoint?      // Shoulder/C7 position (can be adjusted by segmentation)
     let hip: CGPoint?           // Hip position (for full posture context)
     let nose: CGPoint?          // Nose (backup for head position)
     
+    // Both ear positions for user selection
+    var leftEar: CGPoint?
+    var rightEar: CGPoint?
+    var leftEarConfidence: Float = 0.0
+    var rightEarConfidence: Float = 0.0
+    var selectedEar: EarSelection? // User-selected ear (nil = auto-selected)
+    
     // Confidence scores (0.0 - 1.0)
     var earConfidence: Float = 0.0
     var shoulderConfidence: Float = 0.0
+    
+    // Facing direction - needed for correct CVA calculation
+    var facingDirection: FacingDirection = .right
+    
+    // Original shoulder Y position before C7 offset (used for body segmentation)
+    var originalShoulderY: CGFloat?
     
     var isValid: Bool {
         // Need at least ear/nose and shoulder for neck hump analysis
@@ -248,8 +266,10 @@ struct SideProfilePose {
         return Double(abs(head.x - shoulder.x))
     }
     
-    /// Calculate neck angle from vertical (0° = perfect alignment)
-    /// Positive angle = head is forward of shoulders
+    /// Calculate CVA (Craniovertebral Angle)
+    /// CVA = angle between horizontal line through C7 and line to ear
+    /// Higher angle = better posture (90° = perfect, ear directly above shoulder)
+    /// Lower angle = worse posture (forward head position)
     func calculateNeckAngle() -> Double? {
         guard let head = headPoint, let shoulder = shoulder else { return nil }
         let dx = head.x - shoulder.x
@@ -259,15 +279,38 @@ struct SideProfilePose {
         // the measurement isn't valid for this analysis
         guard dy > 0.01 else { return nil }
         
-        // Calculate CVA (Craniovertebral Angle) directly
-        // CVA = angle between horizontal line through shoulder and line to ear
-        // Using atan2 to get angle from horizontal
-        // dy = vertical distance (shoulder to ear, positive = ear is above)
-        // dx = horizontal distance (positive = ear is in front)
+        // Calculate the "forward" distance based on facing direction
+        // When facing RIGHT: positive dx (ear to right of shoulder) = forward head
+        // When facing LEFT: negative dx (ear to left of shoulder) = forward head
+        let forwardDistance: Double
+        switch facingDirection {
+        case .right:
+            // Facing right: forward = ear has higher X than shoulder
+            forwardDistance = Double(dx)
+        case .left:
+            // Facing left: forward = ear has lower X than shoulder (so negate)
+            forwardDistance = Double(-dx)
+        }
         
-        // atan2(dy, dx) gives angle from horizontal
-        // We want angle from horizontal to the ear-shoulder line
-        let angleRadians = atan2(Double(dy), Double(abs(dx)))
+        // CVA is the angle from horizontal to the ear-shoulder line
+        // If head is behind shoulder (forwardDistance < 0), that's excellent posture
+        // We use abs() for the angle calculation but the sign tells us if it's forward or back
+        
+        // For CVA: angle = atan2(vertical, horizontal)
+        // Perfect posture (ear above shoulder): angle approaches 90°
+        // Forward head: angle decreases toward 0°
+        
+        // If head is actually behind the shoulder (negative forwardDistance),
+        // that's even better than 90° - but we cap it at ~90° for the CVA metric
+        if forwardDistance <= 0 {
+            // Head is at or behind shoulder - excellent posture
+            // Return angle close to 90° (or slightly more)
+            let angleRadians = atan2(Double(dy), max(0.001, abs(forwardDistance)))
+            return min(90.0, angleRadians * 180.0 / .pi)
+        }
+        
+        // Head is forward of shoulder - calculate actual CVA
+        let angleRadians = atan2(Double(dy), forwardDistance)
         return angleRadians * 180.0 / .pi
     }
 }
@@ -279,6 +322,12 @@ enum PostureDetectionState {
     case ready              // Good position, ready to analyze
     case analyzing          // Taking measurement
     case complete           // Analysis done
+}
+
+// MARK: - Facing Direction
+enum FacingDirection {
+    case left
+    case right
 }
 
 // MARK: - Positioning Guidance

@@ -737,9 +737,6 @@ struct SourcesAndDisclaimerView: View {
                         // Disclaimer Section
                         disclaimerCard
                         
-                        // ML Model Info
-                        mlModelCard
-                        
                         // Research Sources
                         sourcesCard
                     }
@@ -821,60 +818,6 @@ struct SourcesAndDisclaimerView: View {
                     .foregroundColor(AppTheme.Colors.mutedGray)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
-    }
-    
-    // MARK: - ML Model Card
-    private var mlModelCard: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            HStack(spacing: 12) {
-                Image(systemName: "cpu")
-                    .font(.system(size: 24))
-                    .foregroundColor(AppTheme.Colors.accentCyan)
-                
-                Text("Technology Used")
-                    .font(AppTheme.Typography.headline)
-                    .foregroundColor(AppTheme.Colors.softWhite)
-            }
-            
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                Text("This app uses Google's ML Kit Pose Detection to analyze posture from photos. The machine learning model identifies body landmarks (ear, shoulder positions) to estimate postural alignment.")
-                    .font(AppTheme.Typography.body)
-                    .foregroundColor(AppTheme.Colors.mutedGray)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Text("Limitations:")
-                    .font(AppTheme.Typography.headline)
-                    .foregroundColor(AppTheme.Colors.softWhite)
-                    .padding(.top, 8)
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    limitationRow("Results are estimates based on 2D image analysis")
-                    limitationRow("Accuracy depends on photo quality and positioning")
-                    limitationRow("Cannot detect underlying medical conditions")
-                    limitationRow("May not account for individual anatomical variations")
-                }
-            }
-        }
-        .padding(AppTheme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(AppTheme.Colors.primaryBlue.opacity(0.2))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(AppTheme.Colors.accentCyan.opacity(0.3), lineWidth: 1)
-                )
-        )
-    }
-    
-    private func limitationRow(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text("•")
-                .foregroundColor(AppTheme.Colors.mutedGray)
-            Text(text)
-                .font(AppTheme.Typography.small)
-                .foregroundColor(AppTheme.Colors.mutedGray)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
     
