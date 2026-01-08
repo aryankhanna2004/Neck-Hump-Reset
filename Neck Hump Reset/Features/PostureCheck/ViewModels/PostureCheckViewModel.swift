@@ -131,6 +131,7 @@ class PostureCheckViewModel: ObservableObject {
         isEditingPoints = false
         selectedPointToEdit = nil
         isSaved = false
+        selectedPhotoItem = nil  // Reset photo picker selection
         cameraManager.clearCapturedImage()
         
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -152,6 +153,7 @@ class PostureCheckViewModel: ObservableObject {
         editableShoulderPoint = nil
         isEditingPoints = false
         isSaved = false
+        selectedPhotoItem = nil  // Reset photo picker selection
         cameraManager.clearCapturedImage()
     }
     
@@ -160,6 +162,16 @@ class PostureCheckViewModel: ObservableObject {
     func handleSelectedPhoto(_ item: PhotosPickerItem?) async {
         guard let item = item else { return }
         
+        // Immediately transition to analyzing state
+        await MainActor.run {
+            withAnimation {
+                currentState = .analyzing
+                isAnalyzing = true
+            }
+            // Clear the selection immediately so picker dismisses
+            selectedPhotoItem = nil
+        }
+        
         do {
             if let data = try await item.loadTransferable(type: Data.self),
                let uiImage = UIImage(data: data) {
@@ -167,19 +179,14 @@ class PostureCheckViewModel: ObservableObject {
                 stopCamera()
                 
                 // Set the image through camera manager (handles orientation)
+                // This will trigger the binding and start analysis
                 cameraManager.setImage(from: uiImage)
-                
-                // Transition to analyzing state
-                await MainActor.run {
-                    withAnimation {
-                        currentState = .analyzing
-                        isAnalyzing = true
-                    }
-                }
             }
         } catch {
             await MainActor.run {
                 errorMessage = "Failed to load photo: \(error.localizedDescription)"
+                currentState = .positioning
+                isAnalyzing = false
             }
         }
     }
@@ -314,7 +321,16 @@ class PostureCheckViewModel: ObservableObject {
     }
     
     private func analyzeImage(_ image: CGImage) async {
+        let startTime = Date()
+        
         await postureService.analyzeImage(image)
+        
+        // Ensure minimum 2 seconds on analyzing screen for better UX
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minimumDuration: TimeInterval = 2.0
+        if elapsed < minimumDuration {
+            try? await Task.sleep(nanoseconds: UInt64((minimumDuration - elapsed) * 1_000_000_000))
+        }
         
         await MainActor.run {
             if let result = postureService.analysisResult {

@@ -206,7 +206,7 @@ enum HumpSeverity: String, CaseIterable {
 struct SideProfilePose {
     // Key points for side view analysis (already converted to UI coordinates)
     let ear: CGPoint?           // Ear position (represents head position)
-    let shoulder: CGPoint?      // Shoulder position
+    var shoulder: CGPoint?      // Shoulder/C7 position (can be adjusted by segmentation)
     let hip: CGPoint?           // Hip position (for full posture context)
     let nose: CGPoint?          // Nose (backup for head position)
     

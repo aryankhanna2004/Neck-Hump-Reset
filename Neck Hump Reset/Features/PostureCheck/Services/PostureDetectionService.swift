@@ -344,7 +344,9 @@ class PostureDetectionService: ObservableObject {
             }
             
             // C7 is also slightly higher than the shoulder joint
-            let adjustedY = rawPoint.y - 0.02 // Move up 2%
+            // Angle slightly upward (~95° instead of 90° horizontal)
+            // This means moving up more than just straight horizontal
+            let adjustedY = rawPoint.y - 0.06 // Move up 6% (angled upward ~5°)
             
             shoulderPoint = CGPoint(x: adjustedX, y: adjustedY)
             shoulderConfidence = visibleShoulder.inFrameLikelihood
@@ -536,11 +538,12 @@ class PostureDetectionService: ObservableObject {
             do {
                 try handler.perform([request])
                 
-                guard let result = request.results?.first,
-                      let maskBuffer = result.pixelBuffer else {
+                guard let result = request.results?.first else {
                     continuation.resume(returning: nil)
                     return
                 }
+                
+                let maskBuffer = result.pixelBuffer
                 
                 // Convert pixel buffer to find the edge
                 let maskWidth = CVPixelBufferGetWidth(maskBuffer)

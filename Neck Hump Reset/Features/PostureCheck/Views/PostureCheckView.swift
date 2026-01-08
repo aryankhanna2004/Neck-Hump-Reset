@@ -405,7 +405,7 @@ struct PostureCheckView: View {
                     
                     // Action buttons row
             HStack(spacing: 40) {
-                        // Photo picker button
+                        // Photo picker button (single selection)
                         PhotosPicker(
                             selection: $viewModel.selectedPhotoItem,
                             matching: .images,
@@ -587,6 +587,47 @@ struct PostureCheckView: View {
                 }
                 .padding(.top, AppTheme.Spacing.md)
                 
+                // CVA Reference - Show when editing (above photo, zoomed in on upper portion)
+                if viewModel.isEditingPoints {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 14))
+                                .foregroundColor(.orange)
+                            Text("Are the points correct? Use this reference:")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(AppTheme.Colors.softWhite)
+                        }
+                        
+                        // Zoomed-in CVA reference image (cropped to upper portion)
+                        GeometryReader { geo in
+                            Image("CVA")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: geo.size.width, height: geo.size.width * 0.6)
+                                .offset(y: -geo.size.width * 0.15) // Shift up to show upper portion
+                                .clipped()
+                        }
+                        .aspectRatio(2, contentMode: .fit) // Use aspect ratio instead of fixed height
+                        .cornerRadius(12)
+                        
+                        HStack(spacing: 20) {
+                            HStack(spacing: 6) {
+                                Circle().fill(Color.cyan).frame(width: 10, height: 10)
+                                Text("Ear (Tragus)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppTheme.Colors.mutedGray)
+                            }
+                            HStack(spacing: 6) {
+                                Circle().fill(Color.orange).frame(width: 10, height: 10)
+                                Text("C7 (Base of neck)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppTheme.Colors.mutedGray)
+                            }
+                        }
+                    }
+                }
+                
                 // Photo with overlay
                 if let photo = viewModel.capturedPhoto {
                     photoWithOverlay(photo: photo)
@@ -663,25 +704,13 @@ struct PostureCheckView: View {
     // MARK: - Edit Mode Controls
     private var editModeControls: some View {
         VStack(spacing: AppTheme.Spacing.md) {
-            // Header
-            HStack {
-                Image(systemName: "pencil.and.outline")
-                    .font(.system(size: 14))
-                    .foregroundColor(AppTheme.Colors.accentCyan)
-                Text("Adjust Detection Points")
-                    .font(AppTheme.Typography.headline)
-                    .foregroundColor(AppTheme.Colors.softWhite)
-                Spacer()
-            }
-            
             // Instructions
             VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                 instructionRow(icon: "hand.draw", text: "Drag points to correct positions")
                 instructionRow(icon: "hand.pinch", text: "Pinch to zoom for precision")
-                instructionRow(icon: "hand.tap", text: "Double-tap to reset zoom")
             }
             
-            // Point legend and selection
+            // Point selection buttons
             HStack(spacing: AppTheme.Spacing.lg) {
                 // Ear point selector
                 Button(action: { viewModel.selectPoint(.ear) }) {
@@ -715,13 +744,13 @@ struct PostureCheckView: View {
                                 Circle()
                                     .stroke(Color.white, lineWidth: viewModel.selectedPointToEdit == .shoulder ? 2 : 0)
                             )
-                        Text("Shoulder")
+                        Text("C7")
                             .font(AppTheme.Typography.small)
                             .foregroundColor(viewModel.selectedPointToEdit == .shoulder ? .white : AppTheme.Colors.mutedGray)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-        .background(
+                    .background(
                         Capsule()
                             .fill(viewModel.selectedPointToEdit == .shoulder ? Color.orange.opacity(0.3) : Color.clear)
                     )
@@ -749,13 +778,13 @@ struct PostureCheckView: View {
             }
             
             // Action button
-                Button(action: { viewModel.recalculateWithEditedPoints() }) {
+            Button(action: { viewModel.recalculateWithEditedPoints() }) {
                 HStack(spacing: 8) {
-                        Image(systemName: "arrow.clockwise")
+                    Image(systemName: "arrow.clockwise")
                     Text("Apply Changes & Recalculate")
-                    }
+                }
                 .font(AppTheme.Typography.button)
-                    .foregroundColor(AppTheme.Colors.deepNavy)
+                .foregroundColor(AppTheme.Colors.deepNavy)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(
@@ -886,38 +915,53 @@ struct PostureCheckView: View {
     }
     
     private func suggestionsCard(result: NeckHumpAnalysisResult) -> some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            HStack {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundColor(.yellow)
-                Text("Recommendations")
-                    .font(AppTheme.Typography.headline)
-                    .foregroundColor(AppTheme.Colors.softWhite)
-            }
+        VStack(spacing: AppTheme.Spacing.md) {
+            // Icon
+            Image(systemName: "figure.strengthtraining.traditional")
+                .font(.system(size: 40))
+                .foregroundColor(AppTheme.Colors.accentCyan)
+                .padding(.bottom, 4)
             
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                ForEach(result.feedback.prefix(4), id: \.self) { suggestion in
-                    HStack(alignment: .top, spacing: AppTheme.Spacing.sm) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundColor(AppTheme.Colors.accentCyan)
-                            .padding(.top, 2)
-                        
-                        Text(suggestion)
-                            .font(AppTheme.Typography.body)
-                            .foregroundColor(AppTheme.Colors.softWhite)
-                    }
+            Text("Ready to improve?")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(AppTheme.Colors.softWhite)
+            
+            Text("Get a personalized exercise routine based on your results")
+                .font(.system(size: 14))
+                .foregroundColor(AppTheme.Colors.mutedGray)
+                .multilineTextAlignment(.center)
+            
+            Button(action: {
+                // Navigate to exercises tab
+                // For now, dismiss and user can go to exercises
+                dismiss()
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                    Text("Generate Exercise Plan")
                 }
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(AppTheme.Colors.deepNavy)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [AppTheme.Colors.accentCyan, AppTheme.Colors.glowBlue],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(AppTheme.CornerRadius.medium)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
         .padding(AppTheme.Spacing.lg)
         .background(
             RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
                 .fill(AppTheme.Colors.primaryBlue.opacity(0.15))
                 .overlay(
                     RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
-                        .stroke(Color.yellow.opacity(0.2), lineWidth: 1)
+                        .stroke(AppTheme.Colors.accentCyan.opacity(0.3), lineWidth: 1)
                 )
         )
     }
