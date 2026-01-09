@@ -254,11 +254,17 @@ struct PhotoDetailView: View {
                     VStack(spacing: AppTheme.Spacing.lg) {
                         // Zoomable photo with overlay
                         if let image = photo.image {
+                            // Get actual pixel dimensions from CGImage (orientation-independent)
+                            let imageSize: CGSize? = image.cgImage.map { 
+                                CGSize(width: $0.width, height: $0.height) 
+                            }
+                            
                             ZoomablePostureImageView(
                                 image: Image(uiImage: image),
                                 earPoint: photo.earPoint,
                                 shoulderPoint: photo.shoulderPoint,
-                                showOverlay: showOverlay
+                                showOverlay: showOverlay,
+                                imageSize: imageSize
                             )
                             .frame(height: 400)
                             .cornerRadius(16)

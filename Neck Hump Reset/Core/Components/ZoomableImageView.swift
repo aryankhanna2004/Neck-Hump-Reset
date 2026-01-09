@@ -103,6 +103,7 @@ struct ZoomablePostureImageView: View {
     let earPoint: CGPoint?
     let shoulderPoint: CGPoint?
     let showOverlay: Bool
+    let imageSize: CGSize? // Actual image dimensions for correct point scaling
     
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
@@ -114,6 +115,33 @@ struct ZoomablePostureImageView: View {
     
     var body: some View {
         GeometryReader { geometry in
+            let viewSize = geometry.size
+            
+            // Calculate actual displayed image size (accounting for .scaledToFit())
+            let displayedImageSize: CGSize = {
+                guard let imgSize = imageSize else {
+                    // Fallback: use canvas size if image size not provided
+                    return viewSize
+                }
+                
+                let imageAspectRatio = imgSize.height / imgSize.width
+                let viewAspectRatio = viewSize.height / viewSize.width
+                
+                if imageAspectRatio > viewAspectRatio {
+                    // Image is taller - fit to height
+                    return CGSize(
+                        width: viewSize.height / imageAspectRatio,
+                        height: viewSize.height
+                    )
+                } else {
+                    // Image is wider - fit to width
+                    return CGSize(
+                        width: viewSize.width,
+                        height: viewSize.width * imageAspectRatio
+                    )
+                }
+            }()
+            
             ZStack {
                 image
                     .resizable()
@@ -121,9 +149,23 @@ struct ZoomablePostureImageView: View {
                 
                 // Overlay points and lines
                 if showOverlay, let ear = earPoint, let shoulder = shoulderPoint {
-                    Canvas { context, size in
-                        let earPos = CGPoint(x: ear.x * size.width, y: ear.y * size.height)
-                        let shoulderPos = CGPoint(x: shoulder.x * size.width, y: shoulder.y * size.height)
+                    Canvas { context, canvasSize in
+                        // Calculate offset to center the displayed image in the canvas
+                        // (since .scaledToFit() centers the image)
+                        let offsetX = (canvasSize.width - displayedImageSize.width) / 2
+                        let offsetY = (canvasSize.height - displayedImageSize.height) / 2
+                        
+                        // Use displayed image size for point calculations, not canvas size
+                        // Points are normalized (0-1) based on actual image dimensions
+                        // Add offset to account for image centering
+                        let earPos = CGPoint(
+                            x: offsetX + ear.x * displayedImageSize.width,
+                            y: offsetY + ear.y * displayedImageSize.height
+                        )
+                        let shoulderPos = CGPoint(
+                            x: offsetX + shoulder.x * displayedImageSize.width,
+                            y: offsetY + shoulder.y * displayedImageSize.height
+                        )
                         
                         // Draw line from ear to shoulder
                         var linePath = Path()
@@ -133,8 +175,8 @@ struct ZoomablePostureImageView: View {
                         
                         // Draw vertical reference line from shoulder
                         var verticalPath = Path()
-                        verticalPath.move(to: CGPoint(x: shoulderPos.x, y: 0))
-                        verticalPath.addLine(to: CGPoint(x: shoulderPos.x, y: size.height))
+                        verticalPath.move(to: CGPoint(x: shoulderPos.x, y: offsetY))
+                        verticalPath.addLine(to: CGPoint(x: shoulderPos.x, y: offsetY + displayedImageSize.height))
                         context.stroke(verticalPath, with: .color(.green.opacity(0.5)), style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
                         
                         // Draw ear point

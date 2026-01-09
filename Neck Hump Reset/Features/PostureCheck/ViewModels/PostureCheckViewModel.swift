@@ -305,10 +305,37 @@ class PostureCheckViewModel: ObservableObject {
             return
         }
         
+        // Use current editable points (which reflect any edits or ear switches)
+        // Fall back to result points if editable points aren't available
+        let currentEarPoint = editableEarPoint ?? result.earPosition
+        let currentShoulderPoint = editableShoulderPoint ?? result.shoulderPosition
+        
+        // Check if points have changed - if so, recalculate metrics with current points
+        let pointsChanged = (currentEarPoint != result.earPosition) || (currentShoulderPoint != result.shoulderPosition)
+        
+        let finalResult: NeckHumpAnalysisResult
+        if pointsChanged, let pose = postureService.currentPose {
+            // Recalculate metrics with the current points to ensure accuracy
+            finalResult = postureService.calculateNeckHumpMetrics(
+                ear: currentEarPoint,
+                shoulder: currentShoulderPoint,
+                facingDirection: pose.facingDirection
+            )
+            print("📍 Points changed - recalculated metrics for save")
+        } else {
+            // Points haven't changed, but ensure we use current points in the saved result
+            finalResult = NeckHumpAnalysisResult(
+                forwardHeadDistance: result.forwardHeadDistance,
+                neckAngle: result.neckAngle,
+                earPosition: currentEarPoint,
+                shoulderPosition: currentShoulderPoint
+            )
+        }
+        
         let posturePhoto = PosturePhoto(
             imageData: imageData,
             timestamp: Date(),
-            result: result
+            result: finalResult
         )
         
         modelContext.insert(posturePhoto)
@@ -316,7 +343,7 @@ class PostureCheckViewModel: ObservableObject {
         do {
             try modelContext.save()
             isSaved = true
-            print("✅ Photo saved successfully")
+            print("✅ Photo saved successfully with current points (ear: \(currentEarPoint), shoulder: \(currentShoulderPoint))")
         } catch {
             print("❌ Failed to save photo: \(error)")
         }

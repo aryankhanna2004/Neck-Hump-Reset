@@ -280,28 +280,46 @@ struct SideProfilePose {
         guard dy > 0.01 else { return nil }
         
         // Calculate the "forward" distance based on facing direction
-        // When facing RIGHT: positive dx (ear to right of shoulder) = forward head
-        // When facing LEFT: negative dx (ear to left of shoulder) = forward head
+        // IMPORTANT: In side profile photos, "forward" means head is forward relative to C7
+        // For CVA: we want the horizontal distance component for the angle calculation
+        // The sign tells us direction, but for angle calculation we need the magnitude
+        // 
+        // When facing RIGHT: 
+        //   - If ear is to RIGHT of C7 (dx > 0): head is forward (bad) → use positive
+        //   - If ear is to LEFT of C7 (dx < 0): head is back (good) → use negative
+        // When facing LEFT:
+        //   - If ear is to LEFT of C7 (dx < 0): head is forward (bad) → negate to make positive
+        //   - If ear is to RIGHT of C7 (dx > 0): head is back (good) → negate to make negative
         let forwardDistance: Double
         switch facingDirection {
         case .right:
-            // Facing right: forward = ear has higher X than shoulder
+            // Facing right: forward = ear has higher X than C7
+            // Use dx as-is: positive = forward (bad), negative = back (good)
             forwardDistance = Double(dx)
         case .left:
-            // Facing left: forward = ear has lower X than shoulder (so negate)
+            // Facing left: forward = ear has lower X than C7
+            // Negate dx: if dx is negative (ear left of C7), negate to positive (forward)
             forwardDistance = Double(-dx)
         }
         
-        // CVA is the angle from horizontal to the ear-shoulder line
+        // Debug: Check if interpretation might be inverted
+        // If user says good posture but forwardDistance is positive, we might need to invert
+        print("   📍 Direction check: dx=\(dx), facing=\(facingDirection), forwardDistance=\(forwardDistance)")
+        print("   📍 Interpretation: \(forwardDistance > 0 ? "FORWARD (bad)" : forwardDistance < 0 ? "BACK (good)" : "ALIGNED")")
+        
+        // CVA (Craniovertebral Angle) calculation:
+        // CVA = angle between horizontal line through C7 and line from C7 to ear
+        // 
+        // Using atan2(vertical, horizontal):
+        // - atan2(dy, forwardDistance) gives angle from horizontal (0°) counterclockwise
+        // - Perfect posture (ear directly above C7): forwardDistance ≈ 0 → angle ≈ 90°
+        // - Forward head posture: forwardDistance > 0 → angle < 90° (e.g., 44° = severe FHP)
+        //
+        // Example: If ear is forward by 0.2 and above by 0.2:
+        //   angle = atan2(0.2, 0.2) = 45° (forward head posture)
+        //
         // If head is behind shoulder (forwardDistance < 0), that's excellent posture
-        // We use abs() for the angle calculation but the sign tells us if it's forward or back
-        
-        // For CVA: angle = atan2(vertical, horizontal)
-        // Perfect posture (ear above shoulder): angle approaches 90°
-        // Forward head: angle decreases toward 0°
-        
-        // If head is actually behind the shoulder (negative forwardDistance),
-        // that's even better than 90° - but we cap it at ~90° for the CVA metric
+        // We cap it at 90° for the CVA metric
         if forwardDistance <= 0 {
             // Head is at or behind shoulder - excellent posture
             // Return angle close to 90° (or slightly more)
@@ -310,8 +328,29 @@ struct SideProfilePose {
         }
         
         // Head is forward of shoulder - calculate actual CVA
-        let angleRadians = atan2(Double(dy), forwardDistance)
-        return angleRadians * 180.0 / .pi
+        // This is the standard CVA measurement: angle from horizontal to ear-shoulder line
+        // IMPORTANT: Use absolute value of horizontal distance for angle calculation
+        // The direction (forward/back) doesn't affect the angle itself, only whether it's good/bad
+        let horizontalDistance = abs(forwardDistance)
+        let angleRadians = atan2(Double(dy), horizontalDistance)
+        let angleDegrees = angleRadians * 180.0 / .pi
+        
+        // Debug logging
+        print("📐 CVA Calculation Debug:")
+        print("   Ear: (\(head.x), \(head.y))")
+        print("   C7: (\(shoulder.x), \(shoulder.y))")
+        print("   dx: \(dx), dy: \(dy)")
+        print("   Facing: \(facingDirection), forwardDistance: \(forwardDistance)")
+        print("   Horizontal distance (abs): \(horizontalDistance)")
+        print("   Raw angle: \(angleDegrees)°")
+        
+        // Verify: angle should be between 0° and 90°
+        // 0° = head completely forward (worst)
+        // 90° = head directly above shoulder (best)
+        let finalAngle = max(0.0, min(90.0, angleDegrees))
+        print("   Final CVA: \(finalAngle)°")
+        print("   Posture assessment: \(forwardDistance > 0 ? "FORWARD head (bad)" : forwardDistance < 0 ? "BACK head (good)" : "ALIGNED (perfect)")")
+        return finalAngle
     }
 }
 

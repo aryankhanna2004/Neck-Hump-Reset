@@ -408,7 +408,7 @@ class PostureDetectionService: ObservableObject {
         // Apply offset to move ear away from face (toward back of head)
         // ML Kit detects slightly toward the face, so we adjust away from face
         // Apply to BOTH ears so user selection works correctly
-        let earOffsetAwayFromFace: CGFloat = 0.008 // 0.8% adjustment away from face
+        let earOffsetAwayFromFace: CGFloat = 0.009 // 0.9% adjustment away from face
         
         if facingRight {
             // Facing RIGHT → ears detected too far RIGHT (toward face) → move LEFT (away from face)
@@ -732,12 +732,30 @@ class PostureDetectionService: ObservableObject {
                 }
                 
                 if let edge = edgeX {
-                    // C7 is EXACTLY on the body edge - no inward offset
-                    // Return normalized coordinates
-                    let normalizedX = CGFloat(edge) / CGFloat(maskWidth)
+                    // C7 spinous process is NOT at the outer back edge of the silhouette
+                    // It's at the spine, which is roughly 8-12% of body width inward from the back edge
+                    // The back edge includes the shoulder blade and upper back muscles
+                    // C7 is at the neck/spine, closer to center
+                    let bodyWidth = maskWidth // approximate
+                    let spineOffset = Int(0.04 * CGFloat(bodyWidth)) // 4% inward toward spine
+                    
+                    let spineX: Int
+                    switch facingDirection {
+                    case .right:
+                        // Back edge is on left, C7 spine is to the right (toward center)
+                        spineX = edge + spineOffset
+                    case .left:
+                        // Back edge is on right, C7 spine is to the left (toward center)
+                        spineX = edge - spineOffset
+                    }
+                    
+                    // Clamp to valid range
+                    let finalX = max(0, min(maskWidth - 1, spineX))
+                    
+                    let normalizedX = CGFloat(finalX) / CGFloat(maskWidth)
                     let normalizedY = CGFloat(targetRow) / CGFloat(maskHeight)
                     
-                    print("📍 C7 on body edge at: X=\(normalizedX), Y=\(normalizedY)")
+                    print("📍 C7: back edge at X=\(CGFloat(edge) / CGFloat(maskWidth)), spine adjusted to X=\(normalizedX), Y=\(normalizedY)")
                     continuation.resume(returning: CGPoint(x: normalizedX, y: normalizedY))
                 } else {
                     print("⚠️ Could not find body edge at C7 height")

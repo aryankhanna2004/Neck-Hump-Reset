@@ -97,15 +97,29 @@ struct ZoomablePhotoOverlayView: View {
                             lineWidth: 3
                         )
                         
-                        // Draw forward distance indicator (horizontal line)
+                        // Draw horizontal reference line through C7 (for CVA measurement)
+                        // CVA = angle between this horizontal line and the line from C7 to ear
+                        let horizontalLineLength: CGFloat = max(50, abs(earPixel.x - shoulderPixel.x) + 30)
+                        var horizontalPath = Path()
+                        let horizontalStartX = min(shoulderPixel.x, earPixel.x) - 15
+                        let horizontalEndX = max(shoulderPixel.x, earPixel.x) + 15
+                        horizontalPath.move(to: CGPoint(x: horizontalStartX, y: shoulderPixel.y))
+                        horizontalPath.addLine(to: CGPoint(x: horizontalEndX, y: shoulderPixel.y))
+                        context.stroke(
+                            horizontalPath,
+                            with: .color(.red.opacity(0.6)),
+                            style: StrokeStyle(lineWidth: 2, dash: [4, 2])
+                        )
+                        
+                        // Draw forward distance indicator (horizontal line from shoulder to ear's X position)
                         if earPixel.x != shoulderPixel.x {
                             var forwardPath = Path()
-                            forwardPath.move(to: CGPoint(x: shoulderPixel.x, y: earPixel.y))
-                            forwardPath.addLine(to: earPixel)
+                            forwardPath.move(to: CGPoint(x: shoulderPixel.x, y: shoulderPixel.y))
+                            forwardPath.addLine(to: CGPoint(x: earPixel.x, y: shoulderPixel.y))
                             context.stroke(
                                 forwardPath,
-                                with: .color(.yellow),
-                                style: StrokeStyle(lineWidth: 1.5, dash: [4, 2])
+                                with: .color(.yellow.opacity(0.7)),
+                                style: StrokeStyle(lineWidth: 1.5, dash: [3, 2])
                             )
                         }
                         
