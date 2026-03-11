@@ -55,4 +55,4 @@ All data stays on your device. No photos, posture scores, or personal informatio
 
 ## License
 
-All rights reserved.
+This project is proprietary software. All rights reserved. You may view the source code but may not copy, modify, distribute, or use it without permission. See [LICENSE](LICENSE) for details.
