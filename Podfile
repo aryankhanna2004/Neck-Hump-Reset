@@ -1,5 +1,5 @@
 # Uncomment the next line to define a global platform for your project
-platform :ios, '16.0'
+platform :ios, '17.0'
 
 target 'Neck Hump Reset' do
   # Comment the next line if you don't want to use dynamic frameworks
@@ -13,7 +13,7 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
       # Fix for Xcode 15+ sandbox rsync issues
       config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
       # Suppress warnings in pods (double-quoted include errors)
