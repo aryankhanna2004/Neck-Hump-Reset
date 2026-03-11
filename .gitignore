@@ -56,7 +56,7 @@ playground.xcworkspace
 # https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
 #
 # Note: Uncomment the line below if you want to ignore Pods
-Pods/
+# Pods/
 
 # Carthage
 #
