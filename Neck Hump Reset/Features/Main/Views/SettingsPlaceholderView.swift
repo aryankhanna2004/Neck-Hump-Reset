@@ -348,14 +348,6 @@ struct SettingsPlaceholderView: View {
             
             VStack(spacing: 0) {
                 settingsRow(
-                    icon: "info.circle.fill",
-                    title: "App Version",
-                    subtitle: "1.0.0"
-                ) {}
-                
-                Divider().background(AppTheme.Colors.mutedGray.opacity(0.2))
-                
-                settingsRow(
                     icon: "book.fill",
                     title: "Sources & Citations",
                     subtitle: "Research & references"
@@ -371,18 +363,6 @@ struct SettingsPlaceholderView: View {
                     subtitle: nil
                 ) {
                     if let url = URL(string: "https://aryankhanna2004.github.io/Neck-Hump-Reset/privacy-policy") {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                
-                Divider().background(AppTheme.Colors.mutedGray.opacity(0.2))
-                
-                settingsRow(
-                    icon: "questionmark.circle.fill",
-                    title: "Help & Support",
-                    subtitle: "Report issues or get help"
-                ) {
-                    if let url = URL(string: "https://github.com/aryankhanna2004/Neck-Hump-Reset/issues") {
                         UIApplication.shared.open(url)
                     }
                 }
