@@ -13,7 +13,7 @@ struct AppConfig {
     
     /// Set to `true` to show developer options in Settings
     /// Set to `false` before shipping to App Store
-    static let testMode = true
+    static let testMode = false
     
     /// Set to `true` to always show onboarding (ignores saved state)
     static let alwaysShowOnboarding = false

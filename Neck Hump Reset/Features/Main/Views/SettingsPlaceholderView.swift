@@ -370,7 +370,9 @@ struct SettingsPlaceholderView: View {
                     title: "Privacy Policy",
                     subtitle: nil
                 ) {
-                    // Open privacy policy
+                    if let url = URL(string: "https://aryankhanna2004.github.io/Neck-Hump-Reset/privacy-policy") {
+                        UIApplication.shared.open(url)
+                    }
                 }
                 
                 Divider().background(AppTheme.Colors.mutedGray.opacity(0.2))
@@ -378,9 +380,11 @@ struct SettingsPlaceholderView: View {
                 settingsRow(
                     icon: "questionmark.circle.fill",
                     title: "Help & Support",
-                    subtitle: nil
+                    subtitle: "Report issues or get help"
                 ) {
-                    // Open help
+                    if let url = URL(string: "https://github.com/aryankhanna2004/Neck-Hump-Reset/issues") {
+                        UIApplication.shared.open(url)
+                    }
                 }
             }
             .background(

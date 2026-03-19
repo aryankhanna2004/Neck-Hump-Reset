@@ -73,6 +73,6 @@ The App requests camera access to take side-profile photos for posture analysis.
 
 If this Privacy Policy is updated, the revised version will be posted on this page with an updated effective date.
 
-## Contact
+## Contact & Issues
 
-If you have questions about this Privacy Policy, please open an issue on the [GitHub repository](https://github.com/aryankhanna2004/Neck-Hump-Reset).
+If you have questions about this Privacy Policy or encounter any issues with the App, please open an issue on our [GitHub Issues page](https://github.com/aryankhanna2004/Neck-Hump-Reset/issues).
