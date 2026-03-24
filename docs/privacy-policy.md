@@ -11,7 +11,7 @@ Neck Hump Reset ("the App") is committed to protecting your privacy. This Privac
 
 ## Summary
 
-**All data stays on your device.** The App does not collect, transmit, or store any personal data on external servers. There is no cloud component, no user accounts, and no analytics tracking.
+**All your personal data stays on your device.** The App does not collect, transmit, or store any personal data (photos, landmark coordinates, posture scores, or profile information) on external servers. There is no cloud component, no user accounts, and no analytics tracking. The Google ML Kit SDK used for pose detection may send anonymous SDK usage diagnostics to Google (see Third-Party Services below), but **no user photos, images, face data, or personal information** are included in these diagnostics.
 
 ## Data Collected
 
@@ -24,10 +24,12 @@ The App uses the following data, all of which is stored **locally on your device
 
 ### Face and Body Landmark Data
 - The App uses Google ML Kit Pose Detection to detect body landmarks from your side-profile photo, including **ear position, eye position, nose position, shoulder position, and hip position**.
-- These landmarks are used **solely** to calculate your craniovertebral angle (CVA) and determine your facing direction. The ear and shoulder landmarks are the primary data points used for posture scoring.
-- **Face data is never collected, stored, or used for facial recognition, identification, or tracking purposes.** The App does not identify who you are from the detected landmarks.
-- Landmark coordinates are processed **entirely on-device** in real-time. They exist only in temporary memory during the analysis and are **not saved** to disk or any database. Only the resulting posture score and angle measurement are stored.
-- No face or body landmark data is **ever** transmitted off your device or shared with any third party, including Google.
+- These landmarks are used **solely** to calculate your craniovertebral angle (CVA) and determine your facing direction.
+- **Ear and shoulder landmark coordinates** are stored locally on your device alongside each posture check photo using Apple's SwiftData framework. This allows the App to display the posture overlay on your historical photos and track your progress over time.
+- **Eye, nose, and hip landmark coordinates** are used only transiently during the analysis to determine facing direction. They exist only in temporary memory and are **not saved** to disk or any database.
+- **Face data is never used for facial recognition, identification, or tracking purposes.** The App does not identify who you are from the detected landmarks.
+- All landmark data is processed **entirely on-device**. No face or body landmark data is **ever** transmitted off your device or shared with any third party, including Google.
+- You can delete any stored landmark data at any time by deleting the associated posture check photo from within the App.
 
 ### Posture Analysis Data
 - Craniovertebral angle measurements, posture scores, and severity classifications are computed **entirely on-device** using Google ML Kit Pose Detection and Apple Vision.
@@ -43,29 +45,46 @@ The App uses the following data, all of which is stored **locally on your device
 All data processing occurs **locally on your device**:
 
 - **Pose Detection**: Google ML Kit's Accurate Pose Detector runs on-device to detect body landmarks (ears, eyes, nose, shoulders, hips). No images or landmark data are sent to Google or any third party.
-- **Face/Body Landmark Processing**: Detected landmark coordinates (including facial points such as ears, eyes, and nose) are held in temporary memory only during the active analysis session. They are used to calculate the craniovertebral angle and are then discarded. Landmark coordinates are **never** written to persistent storage.
+- **Face/Body Landmark Processing**: Detected landmark coordinates (including facial points such as ears, eyes, and nose) are processed on-device. Ear and shoulder coordinates are saved locally alongside each posture check photo to enable progress tracking and overlay display. Eye, nose, and hip coordinates are held in temporary memory only during the active analysis session and are then discarded.
 - **Body Segmentation**: Apple's Vision framework runs on-device for improved C7 vertebra estimation.
-- **Posture Scoring**: All angle calculations and scoring happen locally. Only the final posture score, angle, and severity classification are saved — not the underlying landmark data.
+- **Posture Scoring**: All angle calculations and scoring happen locally. The final posture score, angle, severity classification, and the ear/shoulder coordinates used for the calculation are saved locally on-device.
 
 ## Third-Party Services
 
-The App does **not** use any third-party analytics, advertising, or tracking services. There are no third-party SDKs that collect or transmit user data.
+The App does **not** use any third-party analytics, advertising, or tracking services.
 
-Google ML Kit is used for pose detection, but it operates **entirely on-device**. No data is sent to Google's servers.
+### Google ML Kit (Pose Detection)
+
+Google ML Kit is used for on-device pose detection. All pose detection inference (analyzing images to detect body landmarks) runs **entirely on-device**. **No user photos, images, face data, landmark coordinates, or personal information are sent to Google.**
+
+However, as disclosed in [Google's ML Kit Terms](https://developers.google.com/ml-kit/terms), the ML Kit SDK may send **anonymous SDK usage diagnostics** to Google, including:
+
+- SDK performance metrics (e.g., detection speed, API call frequency)
+- Device information (e.g., device model, OS version)
+- Error codes and crash diagnostics related to the SDK itself
+
+This diagnostic data is:
+- **Anonymous** — it does not contain any user-identifiable information
+- **Not user content** — no photos, images, landmark data, or posture scores are included
+- **Encrypted in transit** via HTTPS
+- **Not shared with third parties** by Google, per their terms
+
+This telemetry is a standard component of Google's ML Kit SDK and cannot be disabled independently. It is used by Google solely to maintain, improve, and debug the ML Kit APIs.
 
 ## Data Storage
 
-- **Photos and posture history**: Stored locally using Apple's SwiftData framework in the App's sandboxed container.
+- **Photos, posture history, and landmark coordinates**: Stored locally using Apple's SwiftData framework in the App's sandboxed container. This includes the side-profile photo, posture score, craniovertebral angle, severity, and the ear and shoulder landmark coordinates for each posture check.
 - **User preferences**: Stored locally using Apple's UserDefaults.
 - **No cloud storage**: The App has no server, database, or cloud storage component.
 
 ## Data Sharing
 
-The App does **not** share any data with third parties. There is no data to share because nothing leaves your device.
+The App does **not** share any user photos, face data, landmark coordinates, posture scores, or personal information with any third party. The only data that may leave your device is the anonymous SDK usage diagnostics sent by the Google ML Kit library as described in the Third-Party Services section above. These diagnostics contain no user-identifiable information or user content.
 
 ## Data Retention
 
-- **Face and body landmark data**: Not retained. Landmark coordinates exist only in temporary memory during the active posture analysis and are discarded immediately after the posture score is calculated. They are never written to disk.
+- **Ear and shoulder landmark coordinates**: Stored locally on-device alongside each posture check photo for as long as the photo exists. Deleted when you delete the associated posture check photo or uninstall the App.
+- **Eye, nose, and hip landmark coordinates**: Not retained. These exist only in temporary memory during the active posture analysis and are discarded immediately after the calculation completes. They are never written to disk.
 - **Photos and posture scores**: Remain on your device until you delete them within the App or delete the App itself (which removes all associated data).
 - **Personal preferences**: Remain on your device until you delete the App.
 
