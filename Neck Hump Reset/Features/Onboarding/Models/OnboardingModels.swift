@@ -10,6 +10,7 @@ import Foundation
 // MARK: - Onboarding Step
 enum OnboardingStep: Int, CaseIterable {
     case welcome = 0
+    case disclaimer
     case nameEntry
     case screenTime
     case screenTimeReassurance
@@ -21,6 +22,8 @@ enum OnboardingStep: Int, CaseIterable {
     var title: String {
         switch self {
         case .welcome:
+            return ""
+        case .disclaimer:
             return ""
         case .nameEntry:
             return "What's your name?"
@@ -43,6 +46,8 @@ enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome:
             return ""
+        case .disclaimer:
+            return ""
         case .nameEntry:
             return "Let's personalize your experience"
         case .screenTime:
@@ -60,7 +65,7 @@ enum OnboardingStep: Int, CaseIterable {
         }
     }
     
-    // Steps that count toward progress (excluding reassurance screen and welcome)
+    // Steps that count toward progress (excluding reassurance screen, welcome, and disclaimer)
     static var progressSteps: [OnboardingStep] {
         [.nameEntry, .screenTime, .situation, .timeCommitment, .movementComfort]
     }

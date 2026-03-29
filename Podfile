@@ -11,6 +11,15 @@ target 'Neck Hump Reset' do
 end
 
 post_install do |installer|
+  # Remove excluded architectures from aggregate xcconfig files so simulators work on Apple Silicon
+  installer.generated_aggregate_targets.each do |aggregate_target|
+    aggregate_target.xcconfigs.each do |config_name, config|
+      config.attributes.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
+      xcconfig_path = aggregate_target.xcconfig_path(config_name)
+      config.save_as(xcconfig_path)
+    end
+  end
+
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
@@ -21,6 +30,8 @@ post_install do |installer|
       config.build_settings['SWIFT_SUPPRESS_WARNINGS'] = 'YES'
       # Fix for quoted includes in framework headers
       config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+      # Remove excluded architectures so simulators work on Apple Silicon
+      config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
     end
   end
 end

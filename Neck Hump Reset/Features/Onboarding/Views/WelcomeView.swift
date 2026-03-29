@@ -99,7 +99,7 @@ struct WelcomeView: View {
                 .offset(y: titleOffset)
                 .opacity(titleOpacity)
             
-            Text("Fix tech neck with daily\n5-minute routines")
+            Text("Improve your posture with daily\n5-minute routines")
                 .font(AppTheme.Typography.body)
                 .foregroundColor(AppTheme.Colors.mutedGray)
                 .multilineTextAlignment(.center)

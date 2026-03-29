@@ -119,9 +119,9 @@ enum HumpSeverity: String, CaseIterable {
     var title: String {
         switch self {
         case .minimal: return "Great Posture"
-        case .mild: return "Mild Forward Head"
-        case .moderate: return "Moderate Neck Hump"
-        case .severe: return "Significant Neck Hump"
+        case .mild: return "Slightly Forward"
+        case .moderate: return "Noticeably Forward"
+        case .severe: return "Very Forward"
         }
     }
     
@@ -156,13 +156,13 @@ enum HumpSeverity: String, CaseIterable {
     var description: String {
         switch self {
         case .minimal:
-            return "Your head is well-aligned over your shoulders (\(cvaThreshold)). Research shows this is within the normal range. Keep it up!"
+            return "Your head is well-aligned over your shoulders. Nice work — keep it up!"
         case .mild:
-            return "Your head is slightly forward (\(cvaThreshold)). Studies show this is common and very fixable with consistent exercises."
+            return "Your head is slightly forward of your shoulders. This is very common and can often be improved with regular practice."
         case .moderate:
-            return "Your head is noticeably forward of your shoulders (\(cvaThreshold)). Research indicates daily corrective exercises can significantly improve this."
+            return "Your head is noticeably forward of your shoulders. Many people see improvement with consistent daily exercises."
         case .severe:
-            return "Significant forward head posture detected (\(cvaThreshold)). Research suggests consulting a physical therapist alongside exercises for best results."
+            return "Your head appears quite far forward of your shoulders. We recommend consulting a qualified professional for personalized guidance in addition to using this app."
         }
     }
     
@@ -191,7 +191,7 @@ enum HumpSeverity: String, CaseIterable {
             return [
                 "Start with gentle chin tucks - don't force it",
                 "Focus on upper back strengthening exercises",
-                "Consider seeing a physical therapist for personalized guidance",
+                "Consider consulting a qualified professional for personalized guidance",
                 "Take breaks every 20-30 minutes when on screens",
                 "Sleep with a supportive pillow that maintains neck curve"
             ]

@@ -32,6 +32,8 @@ class OnboardingViewModel: ObservableObject {
         switch currentStep {
         case .welcome:
             return true
+        case .disclaimer:
+            return true
         case .nameEntry:
             return !firstName.trimmingCharacters(in: .whitespaces).isEmpty
         case .screenTime:
@@ -80,6 +82,8 @@ class OnboardingViewModel: ObservableObject {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             switch currentStep {
             case .welcome:
+                currentStep = .disclaimer
+            case .disclaimer:
                 currentStep = .nameEntry
             case .nameEntry:
                 currentStep = .screenTime
@@ -108,8 +112,10 @@ class OnboardingViewModel: ObservableObject {
             switch currentStep {
             case .welcome:
                 break
-            case .nameEntry:
+            case .disclaimer:
                 currentStep = .welcome
+            case .nameEntry:
+                currentStep = .disclaimer
             case .screenTime:
                 currentStep = .nameEntry
             case .screenTimeReassurance:

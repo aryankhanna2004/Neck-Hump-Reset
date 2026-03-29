@@ -50,13 +50,13 @@ struct SettingsPlaceholderView: View {
                 .padding(.bottom, 100)
             }
         }
-        .alert("Reset Onboarding?", isPresented: $showResetAlert) {
+        .alert("Redo Setup?", isPresented: $showResetAlert) {
             Button("Cancel", role: .cancel) { }
-            Button("Reset", role: .destructive) {
+            Button("Redo Setup", role: .destructive) {
                 resetOnboarding()
             }
         } message: {
-            Text("This will clear your preferences. The app will restart to show onboarding.")
+            Text("This will reset your profile and preferences. The app will restart so you can go through setup again.")
         }
         .sheet(isPresented: $showEditProfile) {
             EditProfileView(userProfile: $userProfile, onSave: {
@@ -365,6 +365,16 @@ struct SettingsPlaceholderView: View {
                     if let url = URL(string: "https://aryankhanna2004.github.io/Neck-Hump-Reset/privacy-policy") {
                         UIApplication.shared.open(url)
                     }
+                }
+                
+                Divider().background(AppTheme.Colors.mutedGray.opacity(0.2))
+                
+                settingsRow(
+                    icon: "arrow.counterclockwise",
+                    title: "Redo Setup",
+                    subtitle: "Go through onboarding again"
+                ) {
+                    showResetAlert = true
                 }
             }
             .background(
@@ -820,23 +830,22 @@ struct SourcesAndDisclaimerView: View {
             
             // Algorithm Methodology Section
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                Text("Measurement Methodology")
+                Text("How We Estimate Posture")
                     .font(AppTheme.Typography.headline)
                     .foregroundColor(AppTheme.Colors.softWhite)
                 
-                Text("This app uses the Craniovertebral Angle (CVA) method to assess forward head posture. The CVA is measured as the angle between a horizontal line through C7 (shoulder) and a line from the tragus (ear) to C7.")
+                Text("This app estimates your head position relative to your shoulders using a method inspired by the Craniovertebral Angle (CVA). This is a general wellness estimate, not a clinical measurement.")
                     .font(AppTheme.Typography.small)
                     .foregroundColor(AppTheme.Colors.mutedGray)
                     .fixedSize(horizontal: false, vertical: true)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    cvaThresholdRow("CVA > 53°", "Normal posture")
-                    cvaThresholdRow("CVA 45-53°", "Mild forward head")
-                    cvaThresholdRow("CVA < 45°", "Severe forward head")
+                    cvaThresholdRow("Higher angle", "Head well-aligned")
+                    cvaThresholdRow("Lower angle", "Head more forward")
                 }
                 .padding(.vertical, 8)
                 
-                Text("Based on research by Titcomb et al. (2024): CVA > 53° indicates normal head posture, while CVA < 45° indicates severe forward head posture.")
+                Text("Approach inspired by Titcomb et al. (2024). Results are approximate and for general awareness only — not a substitute for professional evaluation.")
                     .font(.system(size: 11))
                     .foregroundColor(AppTheme.Colors.mutedGray.opacity(0.8))
                     .italic()
@@ -885,7 +894,7 @@ struct SourcesAndDisclaimerView: View {
                     .foregroundColor(AppTheme.Colors.softWhite)
                     .padding(.top, 8)
                 
-                Text("Additional studies on cervical spine health and risk factors:")
+                Text("Additional studies on neck and spine wellness:")
                     .font(AppTheme.Typography.small)
                     .foregroundColor(AppTheme.Colors.mutedGray)
             }
@@ -909,7 +918,7 @@ struct SourcesAndDisclaimerView: View {
                     .foregroundColor(AppTheme.Colors.softWhite)
                     .padding(.top, 8)
                 
-                Text("The exercise routines in this app are based on the following clinical trials:")
+                Text("The exercise routines in this app are informed by the following published studies:")
                     .font(AppTheme.Typography.small)
                     .foregroundColor(AppTheme.Colors.mutedGray)
             }

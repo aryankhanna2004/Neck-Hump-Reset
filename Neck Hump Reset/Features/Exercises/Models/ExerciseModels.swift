@@ -594,20 +594,20 @@ struct ExerciseLibrary {
     static let routines: [ExerciseRoutine] = [
         ExerciseRoutine(
             name: "Isometric Neck Strengthening",
-            description: "Complete 6-movement isometric protocol shown to significantly reduce neck pain and disability",
+            description: "Complete 6-movement isometric routine to help strengthen your neck muscles",
             exercises: isometricExercises,
             category: .isometric,
-            researchBasis: "Based on Sadeghi et al. (2022) RCT showing significant improvement in NDI and NPAD scores after 4 weeks (P<0.001)",
+            researchBasis: "Informed by Sadeghi et al. (2022) exercise protocol research",
             recommendedFrequency: "3 times daily (morning, afternoon, evening)",
             duration: "4 weeks"
         ),
         
         ExerciseRoutine(
             name: "Deep Neck Flexor Training",
-            description: "Progressive training for the deep cervical flexor muscles that support your neck",
+            description: "Progressive training for the deep neck muscles that support good posture",
             exercises: deepFlexorExercises,
             category: .deepFlexor,
-            researchBasis: "Based on Jull et al. (2008) and Gallego Izquierdo et al. (2016) showing improved neuromuscular control",
+            researchBasis: "Informed by Jull et al. (2008) and Gallego Izquierdo et al. (2016) exercise research",
             recommendedFrequency: "Twice daily",
             duration: "6 weeks"
         ),
@@ -617,7 +617,7 @@ struct ExerciseLibrary {
             description: "Improve your neck's position sense and eye-head coordination",
             exercises: proprioceptionExercises,
             category: .proprioception,
-            researchBasis: "Based on Gallego Izquierdo et al. (2016) RCT comparing proprioception vs CCF training",
+            researchBasis: "Informed by Gallego Izquierdo et al. (2016) exercise research",
             recommendedFrequency: "Once daily",
             duration: "6-8 weeks"
         ),
@@ -627,17 +627,17 @@ struct ExerciseLibrary {
             description: "Release tension in commonly tight neck and shoulder muscles",
             exercises: stretchExercises,
             category: .stretch,
-            researchBasis: "Standard neck rehabilitation protocols",
+            researchBasis: "Based on common neck stretching practices",
             recommendedFrequency: "2-3 times daily or as needed",
             duration: "Ongoing"
         ),
         
         ExerciseRoutine(
             name: "Postural Correction",
-            description: "Exercises to improve overall posture and reduce forward head position",
+            description: "Exercises to help improve overall posture awareness and alignment",
             exercises: posturalExercises,
             category: .postural,
-            researchBasis: "Based on Jull et al. (2002) and Falla et al. (2007) postural rehabilitation research",
+            researchBasis: "Informed by Jull et al. (2002) and Falla et al. (2007) exercise research",
             recommendedFrequency: "Daily, plus throughout the day",
             duration: "Ongoing"
         ),
